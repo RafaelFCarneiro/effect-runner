@@ -6,14 +6,13 @@ export const PersistOp = z.enum(['insert', 'update', 'delete']);
 export type PersistOp = z.infer<typeof PersistOp>;
 
 /** Every entity starts at this version — a structural fact, not a business decision, so a core's
- *  `insert` model never carries it. Each entity's own adapter supplies it when shaping the insert
- *  row, before `runEffects` ever sees the batch — never the database's own `.default(0)`, and
- *  never `diplomat/db`. */
+ *  `insert` model never carries it. The consumer's adapter supplies it when shaping the insert
+ *  row, before `runEffects` ever sees the batch — never the database's own default. */
 export const INITIAL_VERSION = 0;
 
 /** The optimistic-concurrency version token, declared once instead of per entity. Applied to a
  *  pure domain model via `withPersistenceMeta` — never baked into the model itself, so
- *  `Create*`/wire/out/tool-input shapes stay derived from the unmodified model with no `.omit`s. */
+ *  input/output shapes stay derived from the unmodified model with no `.omit`s. */
 export const PersistenceMeta = z.object({
   version: z.number().int().nonnegative().describe('Optimistic-concurrency token; internal, never on wire/out'),
 });
@@ -27,15 +26,13 @@ export const withPersistenceMeta = <T extends z.ZodRawShape>(model: z.ZodObject<
 /**
  * A write intent the functional core hands to the imperative shell (docs/functional-core-imperative-shell.md).
  * Generic over the entity's own tag + model, never a closed union enumerating every entity — each entity
- * module owns its own tag constant (e.g. `models/account.ts`'s `ACCOUNT_ENTITY_TAG`); this file never
- * imports a specific entity's model.
+ * module owns its own tag constant; this file never imports a specific entity's model.
  *
  * `insert` carries the plain domain model, no `version` — a brand-new row always starts at
  * `INITIAL_VERSION`, which isn't something the core decides. It also carries an optional
  * `idempotencyKey` — dedup metadata for the write intent, never a business-model field: an entity
- * opts in by the insert itself carrying a key, written to the fixed `idempotencyKey` column
- * (`versionedTableApplier`, `diplomat/db/effects.ts`). A read-first entity (dashboards, settings)
- * leaves it unset. `update` carries the full desired end-state as the versioned entity —
+ * opts in by the insert itself carrying a key, which the entity's applier writes to a fixed
+ * `idempotencyKey` column. A read-first entity leaves it unset. `update` carries the full desired end-state as the versioned entity —
  * `model.version` is the version the core read; the entity's
  * `EntityApplier` computes the persisted version from it (`model.version + 1`) and applies
  * `... SET ..., version = ? WHERE id = ? AND version = ?`. `delete` carries just the id + the
@@ -53,8 +50,7 @@ export type Persistable<Tag extends string = string, Model = unknown> =
  * depends on it doesn't have to re-read the database. `update`/`delete` are always
  * `applied: true` here — a stale `version` already fails as a `conflict` before any outcome is
  * reported (rule 4). `entity` is the tag of the `Persistable` this outcome came from — a flow's
- * own `response` looks up its outcome by tag (`logic/persistence.ts`'s `outcomeFor`), never by
- * position.
+ * own `response` looks up its outcome by tag, never by position.
  */
 export type PersistOutcome = { entity: string; applied: boolean; read?: unknown };
 

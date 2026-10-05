@@ -2,17 +2,15 @@ import { errAsync, okAsync, type Result, ResultAsync } from 'neverthrow';
 import * as R from 'remeda';
 import { PersistOp, type FlowOutcome, type Persistable, type PersistOutcome } from './persistable.js';
 
-/** ADR-030: zero Drizzle/libSQL/FinTrack imports, lint-enforced — `diplomat/db` is the SQLite
- *  adapter that implements the port this file defines. */
+/** Zero database-driver or consumer imports, lint-enforced (ADR 0001) — the consumer's adapter
+ *  implements the port this file defines. */
 
-/** `diplomat/changeBus.ts` has the concrete implementation; redeclared here (not imported) so this
- *  file stays independent of `diplomat/`. */
+/** Post-commit hook: told which entity tags a committed batch changed (e.g. to drive live updates).
+ *  Declared here so the engine stays independent of any concrete change bus. */
 export type PublishChange = (entities: readonly string[]) => void;
 
-// The vast majority of call sites (every direct `runEffects`/`runEffectsSequence` test call, plus
-// any composition root that hasn't wired a change bus) don't care about live-update — `publish`
-// defaults to this no-op rather than being required, so this file's only two exported entry points
-// stay backward-compatible.
+// Most callers don't care about change notification — `publish` defaults to this no-op rather than
+// being required, so the two exported entry points stay backward-compatible.
 const noopPublish: PublishChange = () => {};
 
 // A version conflict re-invokes `flow` for a fresh read → fresh decision
@@ -20,24 +18,23 @@ const noopPublish: PublishChange = () => {};
 // tests assert the real policy instead of duplicating the literal.
 export const MAX_RUN_EFFECTS_ATTEMPTS = 3;
 
-/** The port (ADR-030): opens a unit of work, commits on success, rolls back on throw. The
- *  composition root binds this to the concrete adapter (`diplomat/db/driver.ts`'s
- *  `createTransactionRunner` wraps libSQL Drizzle's `Db.transaction`) — the retry/orchestration
- *  code below calls `runInTransaction` and never names `Db.transaction` directly. Generic over an
- *  opaque transaction handle `TTx` — this file has no concrete `Tx` to default it to; the adapter
- *  re-exports a `Tx`-defaulted specialization for its own registrations' convenience. */
+/** The port: opens a unit of work, commits on success, rolls back on throw. The composition root
+ *  binds this to the concrete adapter — the retry/orchestration code below calls `runInTransaction`
+ *  and never names a driver's transaction API directly. Generic over an opaque transaction handle
+ *  `TTx` — this file has no concrete `Tx` to default it to; an adapter may re-export a
+ *  `Tx`-defaulted specialization for its own registrations' convenience. */
 export type TransactionRunner<TTx> = {
   runInTransaction: <T>(work: (tx: TTx) => Promise<T>) => Promise<T>;
 };
 
-/** The port's other capability (ADR-030): classifies a thrown transaction failure as transient
- *  physical contention — retried the same way as a `VersionConflict` — versus a genuine error,
- *  which propagates. The SQLite adapter's implementation (`sqliteErrors.ts`'s `isSqliteBusy`) is
- *  wired in at the composition root; this file never imports it. */
+/** The port's other capability: classifies a thrown transaction failure as transient physical
+ *  contention (e.g. a busy lock) — retried the same way as a `VersionConflict` — versus a genuine
+ *  error, which propagates. The adapter's implementation is wired in at the composition root; this
+ *  file never imports a driver. */
 export type IsTransientContention = (cause: unknown) => boolean;
 
 /** The adapter port plus the composition root's mapping from a retry-exhausted conflict to the
- *  shell's own error type — this is how the engine stays ignorant of FinTrack's `AppError` union
+ *  shell's own error type — this is how the engine stays ignorant of any consumer's error union
  *  while every real caller still gets a properly-typed error back. */
 export type EngineContext<TTx, E> = {
   runner: TransactionRunner<TTx>;
@@ -56,7 +53,7 @@ type ApplierOutcome = Omit<PersistOutcome, 'entity'>;
  * db-row-shaped `model` — the model→row adaptation happens upstream, at the handler that calls
  * `runEffects`, never here — so `unknown` is deliberate: this file has no entity-specific row
  * type to name. Each method returns an `ApplierOutcome`; `applied` drives this file's own
- * retry/conflict decision (rule 4). Generic over the opaque transaction handle `TTx` (ADR-030) —
+ * retry/conflict decision (rule 4). Generic over the opaque transaction handle `TTx` —
  * the adapter that implements this port supplies its own concrete `TTx`.
  */
 export type EntityApplier<TTx> = {
@@ -74,15 +71,14 @@ export type ApplierRegistry<TTx> = Record<string, EntityApplier<TTx>>;
  *  insert/update with the id of the row that actually persisted (on an idempotent duplicate, the
  *  surviving row's — never the discarded mint), returning the decoded view that lands on
  *  `PersistOutcome.read`. The one sanctioned entity-supplied hook performing a read inside the
- *  engine — a recorded deviation from FC/IS rules 3/6 (`docs/architecture.md` § Write path); a
- *  second entity-supplied hook is the signal this design is wrong (ADR-023 option D). Generic over
- *  `TTx` (ADR-030), same as `EntityApplier`. */
+ *  engine — a recorded deviation from FC/IS rules 3/6 (`docs/architecture.md`); a second
+ *  entity-supplied hook is the signal this design is wrong. Generic over `TTx`, same as
+ *  `EntityApplier`. */
 export type ReadBack<TTx> = (tx: TTx, id: string) => Promise<unknown>;
 
 /** Signals "roll back the whole batch and re-invoke the flow for a fresh read/decision" up
  *  through `runInTransaction`'s rejection; caught by `applyBatch`, never leaks past `runEffects`.
- *  Exported so an `EntityApplier` can raise the same retry for its own non-version conflict (see
- *  `diplomat/db/repos/bills.ts`'s `billApplier`). */
+ *  Exported so an `EntityApplier` can raise the same retry for its own non-version conflict (e.g. a unique-constraint race). */
 export class VersionConflict extends Error {}
 
 const resolveApplier = <TTx>(registry: ApplierRegistry<TTx>, entity: string): EntityApplier<TTx> => {
@@ -121,13 +117,11 @@ const applyPersistable = async <TTx>(
   return { ...outcome, entity: p.entity };
 };
 
-/** The retry decision (ADR-030): a logical version conflict or a cause the adapter classifies as
- *  transient physical contention (SQLite: busy_timeout exhausted, or a WAL checkpoint-starvation
- *  snapshot conflict, ADR-024) is retried the same way; anything else is a genuine failure and
+/** The retry decision: a logical version conflict or a cause the adapter classifies as transient
+ *  physical contention (e.g. a lock-wait timeout) is retried the same way; anything else is a genuine failure and
  *  propagates. Composed purely from the `VersionConflict` sentinel this file owns and the
- *  adapter-supplied `isTransientContention` classifier — no sqlite-specific import here. Exported
- *  so this composition has its own fast unit coverage, independent of the integration suite that
- *  exercises it end-to-end against a real SQLite adapter. */
+ *  adapter-supplied `isTransientContention` classifier — no driver-specific import here. Exported
+ *  so this composition has its own fast unit coverage. */
 export const isRetryable = (cause: unknown, isTransientContention: IsTransientContention): boolean =>
   cause instanceof VersionConflict || isTransientContention(cause);
 
@@ -163,10 +157,9 @@ const resolveResponse = <T>(response: T | ((outcomes: PersistOutcome[]) => T), o
   typeof response === 'function' ? (response as (o: PersistOutcome[]) => T)(outcomes) : response;
 
 /** Only outcomes that actually wrote something feed the change bus — an idempotent-duplicate
- *  insert's `applied: false` outcome changed nothing, so its entity is never published (ADR-027
- *  Phase 3). Deduped, since one batch commonly touches the same entity via more than one
- *  `Persistable` (e.g. a transaction insert alongside its tag-set insert touches `transaction`
- *  once but could repeat across other flows). A no-op batch (nothing applied) publishes nothing. */
+ *  insert's `applied: false` outcome changed nothing, so its entity is never published. Deduped,
+ *  since one batch commonly touches the same entity via more than one `Persistable`. A no-op batch
+ *  (nothing applied) publishes nothing. */
 const publishChangedEntities = (outcomes: PersistOutcome[], publish: PublishChange): void => {
   const entities = R.pipe(
     outcomes,
@@ -202,15 +195,13 @@ const attempt = <T, E, TTx>(
  * `persist` batch it returns in one `ctx.runner.runInTransaction` unit of work by dispatching each
  * `Persistable` to the `registry`'s applier for its entity, and returns `flow`'s `response`.
  * Entity-agnostic — only the `registry` (built once at the composition root) knows which entity is
- * which. A version conflict or transient physical contention (`ctx.isTransientContention`,
- * ADR-024) rolls back the whole batch and re-invokes `flow`, up to `MAX_RUN_EFFECTS_ATTEMPTS`
+ * which. A version conflict or transient physical contention (`ctx.isTransientContention`)
+ * rolls back the whole batch and re-invokes `flow`, up to `MAX_RUN_EFFECTS_ATTEMPTS`
  * times, before surfacing `ctx.conflictError()`. This is the single-atomic-unit mode — the "unit
- * of work" mode. `ctx` is the adapter port plus the error binding (ADR-030) — the composition root
- * binds it to the concrete SQLite implementation (`diplomat/db/driver.ts`'s
- * `createTransactionRunner`, `sqliteErrors.ts`'s `isSqliteBusy`) and FinTrack's own `conflict`
- * error. `publish` (ADR-027 Phase 3) is the change bus's post-commit hook, called once per
- * successful commit with the batch's changed entity tags — optional so every existing direct
- * caller (chiefly tests) is unaffected; the composition root binds the real change bus.
+ * of work" mode. `ctx` is the adapter port plus the error binding — the composition root binds it to
+ * the concrete driver and the consumer's own conflict error. `publish` is the post-commit hook,
+ * called once per successful commit with the batch's changed entity tags — optional, so callers
+ * that don't need change notification are unaffected.
  */
 export const runEffects = <T, E, TTx>(
   ctx: EngineContext<TTx, E>,
@@ -226,16 +217,16 @@ export const runEffects = <T, E, TTx>(
 export type SequenceOutcome<T, E> = Result<T, E>;
 
 /**
- * The sequence-of-independent-units mode (ADR-022 decisions 3–4): applies `items` in order, each
+ * The sequence-of-independent-units mode applies `items` in order, each
  * through its own call to `attempt` — its own transaction, its own bounded conflict retry — so
  * retry semantics are identical to the single-atomic-unit mode by construction, never
  * re-implemented here. `flowFor(item)` is invoked only once this loop reaches that item, i.e.
  * after every earlier item has already committed (or been recorded as failed) — the re-invocation
  * this relies on for retry is the same mechanism that makes unit *i+1* see unit *i*'s committed
- * writes (option B). A unit's domain error, or its own retry exhaustion, is recorded as `Err` and
+ * writes. A unit's domain error, or its own retry exhaustion, is recorded as `Err` and
  * the loop continues to the next item — partial success, never a short-circuit; only a genuine
- * unexpected failure (not a version conflict) still throws, same as `runEffects`. `publish`
- * (ADR-027 Phase 3), same default as `runEffects`, fires per unit that actually commits.
+ * unexpected failure (not a version conflict) still throws, same as `runEffects`. `publish`,
+ * same default as `runEffects`, fires per unit that actually commits.
  */
 export const runEffectsSequence = async <I, T, E, TTx>(
   ctx: EngineContext<TTx, E>,
