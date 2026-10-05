@@ -1,4 +1,4 @@
-# @rafaelfcarneiro/effect-runner
+# @rfc0/effect-runner
 
 A small, **database-agnostic** effect runner for the functional-core / imperative-shell pattern.
 
@@ -14,14 +14,14 @@ Pairs naturally with [neverthrow](https://github.com/supermacro/neverthrow) (Res
 ## Install
 
 ```bash
-npm install @rafaelfcarneiro/effect-runner zod neverthrow
+npm install @rfc0/effect-runner zod neverthrow
 ```
 
 ## The contract (what your domain returns)
 
 ```ts
-import type { FlowOutcome, Persistable } from '@rafaelfcarneiro/effect-runner';
-import { insert } from '@rafaelfcarneiro/effect-runner'; // your logic builds Persistables
+import type { FlowOutcome, Persistable } from '@rfc0/effect-runner';
+import { insert } from '@rfc0/effect-runner'; // your logic builds Persistables
 
 // A flow returns the writes as data + the response — it performs no I/O.
 const createThing = (input): FlowOutcome<Thing> => ({
@@ -49,7 +49,7 @@ const createThing = (input): FlowOutcome<Thing> => ({
   error taxonomy.
 
 ```ts
-import { runEffects } from '@rafaelfcarneiro/effect-runner';
+import { runEffects } from '@rfc0/effect-runner';
 
 const result = await runEffects(flowOutcome, {
   runInTransaction,          // your TransactionRunner

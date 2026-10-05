@@ -1,6 +1,6 @@
 name: Release
 
-# Publishes @rafaelfcarneiro/effect-runner to npm when a GitHub Release is published.
+# Publishes @rfc0/effect-runner to npm when a GitHub Release is published.
 # Cut a release on a vX.Y.Z tag whose version matches package.json; this workflow runs the gate
 # and *stages* the version via npm trusted publishing (OIDC) — no token or secret. The version goes
 # live only after you approve it on npmjs.com (or `npm stage approve <id>`, needs 2FA). Requires a trusted publisher
