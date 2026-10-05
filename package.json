@@ -1,0 +1,68 @@
+{
+  "name": "@rafaelfcarneiro/effect-runner",
+  "version": "0.1.0",
+  "description": "A generic functional-core / imperative-shell effect runner: the domain returns writes as data, a driver-agnostic shell applies them with optimistic-concurrency version guards, idempotency, and retry. Bring your own database via a small adapter port.",
+  "license": "MIT",
+  "author": "Rafael Ferreira Carneiro",
+  "type": "module",
+  "keywords": [
+    "functional-core",
+    "imperative-shell",
+    "unit-of-work",
+    "optimistic-concurrency",
+    "idempotency",
+    "effects",
+    "neverthrow",
+    "zod"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rafaelfcarneiro/effect-runner.git"
+  },
+  "homepage": "https://github.com/rafaelfcarneiro/effect-runner#readme",
+  "bugs": {
+    "url": "https://github.com/rafaelfcarneiro/effect-runner/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "module": "./dist/index.js",
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src test",
+    "test": "vitest run",
+    "prepublishOnly": "npm run lint && npm run typecheck && npm run test && npm run build"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "zod": "^3.25.0"
+  },
+  "dependencies": {
+    "neverthrow": "^8.2.0",
+    "remeda": "^2.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "eslint": "^9.18.0",
+    "typescript": "^5.8.0",
+    "typescript-eslint": "^8.20.0",
+    "vitest": "^4.1.8",
+    "zod": "^3.25.0"
+  }
+}
