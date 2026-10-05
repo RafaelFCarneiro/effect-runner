@@ -1,0 +1,13 @@
+# Global fallback owner
+* @RafaelFCarneiro
+
+# Public API and port contract (semver-governed)
+/src/ @RafaelFCarneiro
+/package.json @RafaelFCarneiro
+
+# Quality and release controls
+/test/ @RafaelFCarneiro
+/.github/ @RafaelFCarneiro
+/tsconfig.json @RafaelFCarneiro
+/tsconfig.build.json @RafaelFCarneiro
+/eslint.config.js @RafaelFCarneiro
