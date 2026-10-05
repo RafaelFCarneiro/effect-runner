@@ -27,4 +27,7 @@ jobs:
       - run: npm install -g npm@latest # trusted publishing needs npm >= 11.5.1
       - run: npm ci
       - run: npm run lint && npm run typecheck && npm run test && npm run build
-      - run: npm stage publish --access public
+      # TEMPORARY bootstrap for the first @rfc0 publish (a trusted publisher needs an existing package); revert after.
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
