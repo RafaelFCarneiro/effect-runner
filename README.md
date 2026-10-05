@@ -61,6 +61,13 @@ const result = await runEffects(flowOutcome, {
 
 `runEffectsSequence` runs a sequence of independent units (each its own transaction + retry), for batch imports.
 
+## Documentation
+
+- [Architecture](docs/architecture.md) — the engine's data contract, adapter port, and semantics
+- [Functional Core, Imperative Shell](docs/functional-core-imperative-shell.md) — the principle it implements
+- [Contributing](CONTRIBUTING.md) — conventions and the pre-PR gate
+- [ADR 0001](docs/adr/0001-extracted-from-fintrack.md) — why it exists and what counts as the public API
+
 ## Why
 
 Extracted from a personal-finance app so the write-path engine — the part that is pure plumbing, not domain —
