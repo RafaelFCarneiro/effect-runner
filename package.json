@@ -1,6 +1,6 @@
 {
   "name": "@rafaelfcarneiro/effect-runner",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A generic functional-core / imperative-shell effect runner: the domain returns writes as data, a driver-agnostic shell applies them with optimistic-concurrency version guards, idempotency, and retry. Bring your own database via a small adapter port.",
   "license": "MIT",
   "author": "Rafael Ferreira Carneiro",
