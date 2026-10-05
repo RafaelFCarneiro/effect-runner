@@ -17,11 +17,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/rafaelfcarneiro/effect-runner.git"
+    "url": "git+https://github.com/RafaelFCarneiro/effect-runner.git"
   },
-  "homepage": "https://github.com/rafaelfcarneiro/effect-runner#readme",
+  "homepage": "https://github.com/RafaelFCarneiro/effect-runner#readme",
   "bugs": {
-    "url": "https://github.com/rafaelfcarneiro/effect-runner/issues"
+    "url": "https://github.com/RafaelFCarneiro/effect-runner/issues"
   },
   "engines": {
     "node": ">=20"
