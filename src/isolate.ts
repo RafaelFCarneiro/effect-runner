@@ -1,3 +1,4 @@
+// `Promise.resolve` normalizes foreign thenables, whose `then` may not accept an omitted fulfil handler.
 const ignoreFailure = (): void => {};
 
 const isThenable = (value: unknown): value is PromiseLike<unknown> =>
@@ -11,14 +12,14 @@ export const runIsolated = (work: () => unknown, onFailure: (cause: unknown) => 
   const report = (cause: unknown): void => {
     try {
       const reported = onFailure(cause);
-      if (isThenable(reported)) reported.then(undefined, ignoreFailure);
+      if (isThenable(reported)) Promise.resolve(reported).then(undefined, ignoreFailure);
     } catch {
       // Nowhere left to report to.
     }
   };
   try {
     const result = work();
-    if (isThenable(result)) result.then(undefined, report);
+    if (isThenable(result)) Promise.resolve(result).then(undefined, report);
   } catch (cause) {
     report(cause);
   }

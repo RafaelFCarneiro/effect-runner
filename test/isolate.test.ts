@@ -49,6 +49,19 @@ describe('runIsolated', () => {
     expect(onFailure).toHaveBeenCalledExactlyOnceWith(cause);
   });
 
+  it('handles a resolving thenable that requires a fulfil handler, for both work and onFailure', async () => {
+    const resolvingThenable = { then: (resolve: (value: string) => void) => Promise.resolve().then(() => resolve('ok')) };
+    const onFailure = vi.fn(() => resolvingThenable);
+
+    runIsolated(() => resolvingThenable, onFailure);
+    runIsolated(() => {
+      throw new Error('work failed');
+    }, onFailure);
+    await flushMicrotasks();
+
+    expect(onFailure).toHaveBeenCalledOnce();
+  });
+
   it('does not call onFailure when async work resolves', async () => {
     const onFailure = vi.fn();
 
