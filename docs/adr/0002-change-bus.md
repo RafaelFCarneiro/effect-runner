@@ -21,7 +21,8 @@ succeeded, inviting callers to retry a write that was durable.
    spanning processes implements `ChangeBus` over its own transport (a database `LISTEN`/`NOTIFY`, a broker) and
    hands its `publish` to the engine; the engine does not change.
 4. **Post-commit failure isolation.** The bus isolates each listener (a throwing listener is reported to
-   `onError`, never stops the others, never escapes `publish`) and snapshots listeners per publish. The engine
+   `onError`, never stops the others, never escapes `publish`; async listeners and reporters have their rejections
+   observed, not awaited, so none go unhandled) and snapshots listeners per publish. The engine
    additionally wraps `publish` and routes failures to the optional `EngineContext.onPublishError`, so a custom
    `ChangeBus` cannot turn a committed write into an error. The field is optional, so existing contexts remain
    valid.

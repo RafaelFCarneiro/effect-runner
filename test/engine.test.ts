@@ -110,6 +110,31 @@ describe('change publication after commit', () => {
     expect(results.map((r) => r._unsafeUnwrap())).toEqual(['done', 'done']);
   });
 
+  it('routes an async publish rejection to onPublishError without failing the write', async () => {
+    const { ctx, registry, onPublishError } = makeHarness();
+    const rejectingPublish = async (): Promise<void> => {
+      throw publishCause;
+    };
+
+    const result = await runEffects(ctx, registry, flowOf([insertThing]), rejectingPublish);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(result._unsafeUnwrap()).toBe('done');
+    expect(onPublishError).toHaveBeenCalledExactlyOnceWith(publishCause);
+  });
+
+  it('consumes a rejection from an async onPublishError', async () => {
+    const { ctx, registry } = makeHarness();
+    const rejectingReporter = async (): Promise<void> => {
+      throw new Error('reporter failed');
+    };
+
+    const result = await runEffects({ ...ctx, onPublishError: rejectingReporter }, registry, flowOf([insertThing]), throwingPublish);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(result._unsafeUnwrap()).toBe('done');
+  });
+
   it('keeps every unit committed in a sequence when publish throws', async () => {
     const { ctx, registry, onPublishError } = makeHarness();
 

@@ -1,5 +1,6 @@
 import { errAsync, okAsync, type Result, ResultAsync } from 'neverthrow';
 import * as R from 'remeda';
+import { runIsolated } from './isolate.js';
 import { PersistOp, type FlowOutcome, type Persistable, type PersistOutcome } from './persistable.js';
 
 /** Post-commit hook: receives the entity tags a committed batch changed; skipped when nothing was applied. */
@@ -24,7 +25,7 @@ export type EngineContext<TTx, E> = {
   runner: TransactionRunner<TTx>;
   isTransientContention: IsTransientContention;
   conflictError: () => E;
-  /** Receives a failure from `publish`; a committed write is never failed by its notification. */
+  /** Receives a failure (throw or async rejection) from `publish`; a committed write is never failed by its notification. */
   onPublishError?: (cause: unknown) => void;
 };
 
@@ -116,7 +117,7 @@ const resolveResponse = <T>(response: T | ((outcomes: PersistOutcome[]) => T), o
   typeof response === 'function' ? (response as (o: PersistOutcome[]) => T)(outcomes) : response;
 
 /** Publishes the deduped tags of outcomes that actually wrote; idempotent duplicates publish nothing.
- *  Runs after commit, so a throwing `publish` is routed to `onPublishError` instead of failing the write. */
+ *  Runs after commit, so a throwing or rejecting `publish` is routed to `onPublishError` instead of failing the write. */
 const publishChangedEntities = <TTx, E>(
   ctx: EngineContext<TTx, E>,
   outcomes: PersistOutcome[],
@@ -129,16 +130,7 @@ const publishChangedEntities = <TTx, E>(
     R.unique(),
   );
   if (entities.length === 0) return;
-  try {
-    publish(entities);
-  } catch (cause) {
-    // The write is already committed; a faulty reporter must not reject it either.
-    try {
-      ctx.onPublishError?.(cause);
-    } catch {
-      // Nowhere left to report to.
-    }
-  }
+  runIsolated(() => publish(entities), ctx.onPublishError);
 };
 
 const attempt = <T, E, TTx>(

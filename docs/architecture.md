@@ -104,7 +104,8 @@ success); only an unexpected failure throws. It returns a neverthrow `Result<T, 
 (`applied: true`). Idempotent duplicates publish nothing, so an all-duplicate or empty batch publishes nothing,
 and it never fires for a rolled-back or retried attempt — only after the commit that stuck.
 
-Notification is best-effort and never part of the write: if `publish` throws, the failure is routed to
+Notification is best-effort and never part of the write: if `publish` throws or returns a rejecting promise
+(an async transport), the failure is routed to
 `ctx.onPublishError` (when set) and `runEffects`/`runEffectsSequence` still return the committed response.
 
 The package ships the `ChangeBus` interface and `createChangeBus`, an in-memory implementation (a `Set` of

@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createChangeBus } from '../src/changeBus.js';
 
+const flushMicrotasks = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
 describe('createChangeBus', () => {
   it('delivers the same entity tags to every subscriber', () => {
     const bus = createChangeBus();
@@ -93,5 +95,33 @@ describe('createChangeBus', () => {
 
     bus.publish(['thing']);
     expect(added).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports an async listener rejection to onError', async () => {
+    const cause = new Error('async listener failed');
+    const onError = vi.fn();
+    const bus = createChangeBus({ onError });
+    bus.subscribe(async () => {
+      throw cause;
+    });
+
+    bus.publish(['thing']);
+    await flushMicrotasks();
+
+    expect(onError).toHaveBeenCalledWith(cause);
+  });
+
+  it('consumes a rejection from an async onError', async () => {
+    const bus = createChangeBus({
+      onError: async () => {
+        throw new Error('async reporter failed');
+      },
+    });
+    bus.subscribe(() => {
+      throw new Error('listener failed');
+    });
+
+    expect(() => bus.publish(['thing'])).not.toThrow();
+    await flushMicrotasks();
   });
 });
