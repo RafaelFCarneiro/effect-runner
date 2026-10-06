@@ -22,7 +22,12 @@ export const createChangeBus = ({ onError = ignoreError }: ChangeBusOptions = {}
     try {
       listener(entities);
     } catch (cause) {
-      onError(cause);
+      // A faulty reporter must not break isolation for the remaining listeners.
+      try {
+        onError(cause);
+      } catch {
+        // Nowhere left to report to.
+      }
     }
   };
 

@@ -82,6 +82,34 @@ describe('change publication after commit', () => {
     expect(result._unsafeUnwrap()).toBe('done');
   });
 
+  it('preserves the committed response when onPublishError itself throws', async () => {
+    const { ctx, registry } = makeHarness();
+    const throwingReporter = (): void => {
+      throw new Error('reporter failed');
+    };
+
+    const result = await runEffects({ ...ctx, onPublishError: throwingReporter }, registry, flowOf([insertThing]), throwingPublish);
+
+    expect(result._unsafeUnwrap()).toBe('done');
+  });
+
+  it('continues a sequence when onPublishError itself throws', async () => {
+    const { ctx, registry } = makeHarness();
+    const throwingReporter = (): void => {
+      throw new Error('reporter failed');
+    };
+
+    const results = await runEffectsSequence(
+      { ...ctx, onPublishError: throwingReporter },
+      registry,
+      [1, 2],
+      () => flowOf([insertThing]),
+      throwingPublish,
+    );
+
+    expect(results.map((r) => r._unsafeUnwrap())).toEqual(['done', 'done']);
+  });
+
   it('keeps every unit committed in a sequence when publish throws', async () => {
     const { ctx, registry, onPublishError } = makeHarness();
 

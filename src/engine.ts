@@ -132,7 +132,12 @@ const publishChangedEntities = <TTx, E>(
   try {
     publish(entities);
   } catch (cause) {
-    ctx.onPublishError?.(cause);
+    // The write is already committed; a faulty reporter must not reject it either.
+    try {
+      ctx.onPublishError?.(cause);
+    } catch {
+      // Nowhere left to report to.
+    }
   }
 };
 

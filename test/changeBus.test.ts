@@ -42,6 +42,22 @@ describe('createChangeBus', () => {
     expect(after).toHaveBeenCalledWith(['thing']);
   });
 
+  it('keeps notifying remaining listeners when onError itself throws', () => {
+    const bus = createChangeBus({
+      onError: () => {
+        throw new Error('reporter failed');
+      },
+    });
+    const after = vi.fn();
+    bus.subscribe(() => {
+      throw new Error('listener failed');
+    });
+    bus.subscribe(after);
+
+    expect(() => bus.publish(['thing'])).not.toThrow();
+    expect(after).toHaveBeenCalledWith(['thing']);
+  });
+
   it('never throws from publish, even without an onError handler', () => {
     const bus = createChangeBus();
     bus.subscribe(() => {
