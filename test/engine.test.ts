@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { isRetryable, VersionConflict } from '../src/engine.js';
 
-// The one new pure decision point the ADR-030 port seam introduces: `applyBatch`
-// (`src/effects/engine.ts`) composes it from the `VersionConflict` sentinel the core owns and the
-// adapter-supplied `isTransientContention` classifier, with no sqlite-specific import. The full
-// retry loop is proven end-to-end against a real SQLite adapter in
-// `test/integration/db/effects.test.ts`; this covers just the composition, in isolation.
-describe('isRetryable (ADR-030 — the retry decision, decoupled from any concrete adapter)', () => {
+// The pure decision point of the port seam: `isRetryable` composes the `VersionConflict` sentinel the
+// engine owns with the adapter-supplied `isTransientContention` classifier, with no driver-specific
+// import. This covers just that composition, in isolation.
+describe('isRetryable (the retry decision, decoupled from any concrete adapter)', () => {
   it('retries a VersionConflict regardless of what the adapter classifier says', () => {
     expect(isRetryable(new VersionConflict(), () => false)).toBe(true);
   });

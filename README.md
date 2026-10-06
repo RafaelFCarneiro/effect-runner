@@ -20,14 +20,15 @@ npm install @rfc0/effect-runner zod neverthrow
 ## The contract (what your domain returns)
 
 ```ts
-import type { FlowOutcome, Persistable } from '@rfc0/effect-runner';
-import { insert } from '@rfc0/effect-runner'; // your logic builds Persistables
+import { PersistOp, type FlowOutcome } from '@rfc0/effect-runner';
+import { okAsync, type ResultAsync } from 'neverthrow';
 
 // A flow returns the writes as data + the response — it performs no I/O.
-const createThing = (input): FlowOutcome<Thing> => ({
-  persist: [{ op: 'insert', entity: 'thing', model: thing, idempotencyKey }],
-  response: thing,
-});
+const createThing = (input: Input): ResultAsync<FlowOutcome<Thing>, MyError> =>
+  okAsync({
+    persist: [{ op: PersistOp.enum.insert, entity: 'thing', model: thing, idempotencyKey }],
+    response: thing,
+  });
 ```
 
 `withPersistenceMeta(schema)` adds the optimistic-concurrency `version` token to a model's *entity* schema;
@@ -35,31 +36,41 @@ const createThing = (input): FlowOutcome<Thing> => ({
 
 ## The adapter port (what you implement for your DB)
 
-`runEffects` is generic over an opaque transaction handle `TTx` and your error type `E`, and takes an
-`EngineContext`:
+`runEffects` is generic over an opaque transaction handle `TTx` and your error type `E`. It takes an
+`EngineContext` (`runner`, `isTransientContention`, `conflictError`), an `ApplierRegistry`, and the flow:
 
-- **`TransactionRunner<TTx>`** — `runInTransaction(work: (tx) => Promise<T>): Promise<T>`; opens a unit of work,
+- **`TransactionRunner<TTx>`** (`ctx.runner`) — `runInTransaction(work: (tx) => Promise<T>): Promise<T>`; opens a unit of work,
   commits on success, rolls back on throw.
 - **`ApplierRegistry<TTx>`** — per entity tag, an **`EntityApplier<TTx>`** with `insert` / `update` / `delete`
-  that perform the mechanical write over `tx` and decide nothing. A versioned applier throws `VersionConflict`
-  on a stale version or a unique/FK race; the engine catches it and retries.
-- **`IsTransientContention`** — `(cause) => boolean`; tells the engine which driver errors are retryable
+  that perform the mechanical write over `tx` and decide nothing. An applier reports `applied: false` on a stale version (the engine turns that into a
+  `VersionConflict`), or may throw `VersionConflict` itself for a unique/FK race; the engine catches it and retries.
+- **`IsTransientContention`** (`ctx.isTransientContention`) — `(cause) => boolean`; tells the engine which driver errors are retryable
   transient contention (e.g. a busy lock).
-- A conflict-error factory so the engine maps an exhausted retry into *your* error type `E` — the engine owns no
+- **`conflictError`** — a factory on `ctx` so the engine maps an exhausted retry into *your* error type `E` — the engine owns no
   error taxonomy.
 
 ```ts
 import { runEffects } from '@rfc0/effect-runner';
 
-const result = await runEffects(flowOutcome, {
-  runInTransaction,          // your TransactionRunner
-  registry,                  // your ApplierRegistry<TTx>
+const ctx = {
+  runner,                    // your TransactionRunner<TTx>
   isTransientContention,     // your driver's busy/contention check
-  conflictError: () => myConflict(),
-});
+  conflictError: () => myConflict(), // maps retry exhaustion into your error type E
+};
+
+// `flow` is a thunk returning a neverthrow ResultAsync<FlowOutcome<T>, E>.
+const result = await runEffects(ctx, registry, () => createThing(input));
+// result: Result<T, E>; optional 4th argument `publish(entities)` fires after each commit that applied at least one write
 ```
 
 `runEffectsSequence` runs a sequence of independent units (each its own transaction + retry), for batch imports.
+
+## Documentation
+
+- [Architecture](docs/architecture.md) — the engine's data contract, adapter port, and semantics
+- [Functional Core, Imperative Shell](docs/functional-core-imperative-shell.md) — the principle it implements
+- [Contributing](CONTRIBUTING.md) — conventions and the pre-PR gate
+- [ADR 0001](docs/adr/0001-extracted-from-fintrack.md) — why it exists and what counts as the public API
 
 ## Why
 
