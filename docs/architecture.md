@@ -63,11 +63,13 @@ What an integrator implements:
   work.
 - **`IsTransientContention`** — `(cause: unknown) => boolean`: classifies a driver error as retryable physical
   contention (e.g. a busy lock) as opposed to a genuine failure.
-- **`EngineContext<TTx, E>`** — `{ runner, isTransientContention, conflictError }`. `conflictError: () => E` is
+- **`EngineContext<TTx, E>`** — `{ runner, isTransientContention, conflictError, onPublishError? }`. `conflictError: () => E` is
   the injected factory that maps retry exhaustion into the consumer's own error type, so the engine owns no
   error taxonomy.
 - **`PublishChange`** — optional post-commit hook `(entities: readonly string[]) => void`, defaulting to a
-  no-op (see below).
+  no-op (see [Change notification](#change-notification)).
+- **`ChangeBus`** — `{ publish: PublishChange; subscribe(listener) => unsubscribe }`, the transport behind
+  `PublishChange`; the package ships an in-memory `createChangeBus`.
 
 ## Semantics
 
@@ -90,14 +92,33 @@ duplicate key, skips the write and returns `applied: false` with `read` reflecti
 never retried for being duplicates; the flow's response function can observe `applied: false` and report
 `created: false`.
 
-**Change publication.** After a successful commit, entities whose outcomes were `applied: true` are deduped
-and passed to `publish`. A batch with nothing applied (all duplicates, or empty) publishes nothing.
-
 **Independent units.** `runEffectsSequence(ctx, registry, items, flowFor, publish?)` applies items in order, each
 through its own transaction and its own bounded retry — identical semantics to `runEffects` by construction.
 `flowFor(item)` is invoked only once earlier items have committed or failed, so unit *i+1* sees unit *i*'s
 writes. A unit's domain error or retry exhaustion is recorded as an `Err` and the loop continues (partial
 success); only an unexpected failure throws. It returns a neverthrow `Result<T, E>` per item.
+
+## Change notification
+
+`PublishChange` fires once per committed batch, with the deduped entity tags of the outcomes that wrote
+(`applied: true`). Idempotent duplicates publish nothing, so an all-duplicate or empty batch publishes nothing,
+and it never fires for a rolled-back or retried attempt — only after the commit that stuck.
+
+Notification is best-effort and never part of the write: if `publish` throws or returns a rejecting promise
+(an async transport), the failure is routed to
+`ctx.onPublishError` (when set) and `runEffects`/`runEffectsSequence` still return the committed response.
+
+The package ships the `ChangeBus` interface and `createChangeBus`, an in-memory implementation (a `Set` of
+listeners; a throwing listener is isolated and reported to its `onError` option; listeners are snapshotted per
+publish) as the default transport. It is process-local: a multi-process deployment implements the same
+`ChangeBus` interface over its own transport (e.g. a database `LISTEN`/`NOTIFY` or a message broker) and passes
+its `publish` to the engine unchanged.
+
+```ts
+const bus = createChangeBus({ onError: reportListenerFailure });
+const unsubscribe = bus.subscribe((entities) => invalidateCaches(entities));
+await runEffects({ ...ctx, onPublishError: reportPublishFailure }, registry, flow, bus.publish);
+```
 
 ## Public API stability
 

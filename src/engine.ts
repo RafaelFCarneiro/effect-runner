@@ -1,5 +1,6 @@
 import { errAsync, okAsync, type Result, ResultAsync } from 'neverthrow';
 import * as R from 'remeda';
+import { runIsolated } from './isolate.js';
 import { PersistOp, type FlowOutcome, type Persistable, type PersistOutcome } from './persistable.js';
 
 /** Post-commit hook: receives the entity tags a committed batch changed; skipped when nothing was applied. */
@@ -24,6 +25,8 @@ export type EngineContext<TTx, E> = {
   runner: TransactionRunner<TTx>;
   isTransientContention: IsTransientContention;
   conflictError: () => E;
+  /** Receives a failure (throw or async rejection) from `publish`; a committed write is never failed by its notification. */
+  onPublishError?: (cause: unknown) => void;
 };
 
 /** An applier never states its own entity tag; the engine stamps it from the `Persistable`. */
@@ -113,15 +116,21 @@ type Flow<T, E> = () => ResultAsync<FlowOutcome<T>, E>;
 const resolveResponse = <T>(response: T | ((outcomes: PersistOutcome[]) => T), outcomes: PersistOutcome[]): T =>
   typeof response === 'function' ? (response as (o: PersistOutcome[]) => T)(outcomes) : response;
 
-/** Publishes the deduped tags of outcomes that actually wrote; idempotent duplicates publish nothing. */
-const publishChangedEntities = (outcomes: PersistOutcome[], publish: PublishChange): void => {
+/** Publishes the deduped tags of outcomes that actually wrote; idempotent duplicates publish nothing.
+ *  Runs after commit, so a throwing or rejecting `publish` is routed to `onPublishError` instead of failing the write. */
+const publishChangedEntities = <TTx, E>(
+  ctx: EngineContext<TTx, E>,
+  outcomes: PersistOutcome[],
+  publish: PublishChange,
+): void => {
   const entities = R.pipe(
     outcomes,
     R.filter((o) => o.applied),
     R.map((o) => o.entity),
     R.unique(),
   );
-  if (entities.length > 0) publish(entities);
+  if (entities.length === 0) return;
+  runIsolated(() => publish(entities), ctx.onPublishError);
 };
 
 const attempt = <T, E, TTx>(
@@ -135,7 +144,7 @@ const attempt = <T, E, TTx>(
     ResultAsync.fromSafePromise(applyBatch(ctx.runner, ctx.isTransientContention, registry, persist)).andThen(
       ({ applied, outcomes }) => {
         if (applied) {
-          publishChangedEntities(outcomes, publish);
+          publishChangedEntities(ctx, outcomes, publish);
           return okAsync(resolveResponse(response, outcomes));
         }
         if (attemptsLeft <= 1) return errAsync<T, E>(ctx.conflictError());

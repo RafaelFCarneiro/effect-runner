@@ -63,6 +63,20 @@ const result = await runEffects(ctx, registry, () => createThing(input));
 // result: Result<T, E>; optional 4th argument `publish(entities)` fires after each commit that applied at least one write
 ```
 
+### Change notification
+
+```ts
+import { createChangeBus, runEffects } from '@rfc0/effect-runner';
+
+const bus = createChangeBus({ onError: logListenerFailure });
+const unsubscribe = bus.subscribe((entities) => refresh(entities)); // e.g. ['thing']
+
+await runEffects({ ...ctx, onPublishError: logPublishFailure }, registry, flow, bus.publish);
+```
+
+`createChangeBus` is an in-memory transport; implement the `ChangeBus` interface yourself for multi-process
+delivery. A failing notification never fails a committed write.
+
 `runEffectsSequence` runs a sequence of independent units (each its own transaction + retry), for batch imports.
 
 ## Documentation
@@ -71,6 +85,7 @@ const result = await runEffects(ctx, registry, () => createThing(input));
 - [Functional Core, Imperative Shell](docs/functional-core-imperative-shell.md) — the principle it implements
 - [Contributing](CONTRIBUTING.md) — conventions and the pre-PR gate
 - [ADR 0001](docs/adr/0001-extracted-from-fintrack.md) — why it exists and what counts as the public API
+- [ADR 0002](docs/adr/0002-change-bus.md) — the change bus and post-commit failure isolation
 
 ## Why
 
