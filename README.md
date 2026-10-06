@@ -60,7 +60,7 @@ const ctx = {
 
 // `flow` is a thunk returning a neverthrow ResultAsync<FlowOutcome<T>, E>.
 const result = await runEffects(ctx, registry, () => createThing(input));
-// result: Result<T, E>; optional 4th argument `publish(entities)` fires after each successful commit
+// result: Result<T, E>; optional 4th argument `publish(entities)` fires after each commit that applied at least one write
 ```
 
 `runEffectsSequence` runs a sequence of independent units (each its own transaction + retry), for batch imports.

@@ -101,5 +101,6 @@ success); only an unexpected failure throws. It returns a neverthrow `Result<T, 
 
 ## Public API stability
 
-The data contract and the adapter port above are the package's public API. See
+Every export of `src/index.ts` — the data contract, the adapter port, and the entry points above — is the
+package's public API and semver-governed. See
 [ADR 0001](adr/0001-extracted-from-fintrack.md).

@@ -39,11 +39,12 @@ State the result in the PR description. Review is the backstop, not the gate.
    `better-sqlite3`, `mysql2`, …) and never names a consumer's entities, error types, or infrastructure. This is
    lint-enforced in `eslint.config.js`; never weaken or bypass it. Allowed runtime deps: `zod`, `neverthrow`,
    `remeda`.
-2. **The adapter port is the public API.** The data contract (`Persistable`, `PersistOutcome`, `FlowOutcome`,
-   `PersistenceMeta`/`withPersistenceMeta`, `INITIAL_VERSION`) and the port (`TransactionRunner`,
-   `EntityApplier`, `ApplierRegistry`, `ReadBack`, `IsTransientContention`, `EngineContext`, `VersionConflict`,
-   `MAX_RUN_EFFECTS_ATTEMPTS`) are semver-governed. A breaking change is a major bump — flag it explicitly and
-   never make one casually (ADR 0001).
+2. **The adapter port is the public API.** Every export of `src/index.ts` is semver-governed — the data contract
+   (`Persistable`, `PersistOutcome`, `FlowOutcome`, `PersistOp`, `PersistenceMeta`/`withPersistenceMeta`,
+   `INITIAL_VERSION`), the port (`TransactionRunner`, `EntityApplier`, `ApplierRegistry`, `ReadBack`,
+   `IsTransientContention`, `EngineContext`, `PublishChange`, `VersionConflict`), and the entry points/helpers
+   (`runEffects`, `runEffectsSequence`, `SequenceOutcome`, `isRetryable`, `MAX_RUN_EFFECTS_ATTEMPTS`). A breaking
+   change is a major bump — flag it explicitly and never make one casually (ADR 0001).
 3. **The engine owns no error taxonomy.** Retry exhaustion is mapped through the injected `conflictError`
    factory; never introduce a concrete error type the consumer must adopt.
 4. **Constants over literals.** No bare string/number where a zod `.enum.*` or named constant exists

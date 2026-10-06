@@ -2,9 +2,7 @@ import { errAsync, okAsync, type Result, ResultAsync } from 'neverthrow';
 import * as R from 'remeda';
 import { PersistOp, type FlowOutcome, type Persistable, type PersistOutcome } from './persistable.js';
 
-// Zero database-driver or consumer imports, lint-enforced (ADR 0001).
-
-/** Post-commit hook: receives the entity tags a committed batch changed. */
+/** Post-commit hook: receives the entity tags a committed batch changed; skipped when nothing was applied. */
 export type PublishChange = (entities: readonly string[]) => void;
 
 // Optional for callers, so `publish` defaults to this no-op.
@@ -149,7 +147,7 @@ const attempt = <T, E, TTx>(
 /**
  * Runs `flow`, applies its `persist` batch atomically via the registry's appliers, and returns its response.
  * A version conflict or transient contention rolls back and re-runs `flow` up to `MAX_RUN_EFFECTS_ATTEMPTS`
- * times, then yields `ctx.conflictError()`. `publish` fires once per successful commit.
+ * times, then yields `ctx.conflictError()`. `publish` fires after a commit that applied at least one write, not for empty or all-duplicate batches.
  */
 export const runEffects = <T, E, TTx>(
   ctx: EngineContext<TTx, E>,

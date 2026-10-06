@@ -14,11 +14,13 @@ decision trail.
 ## Decision
 
 1. The engine is published as `@rfc0/effect-runner`, MIT-licensed, public on npm.
-2. **The adapter port is the public API.** The data contract (`Persistable`, `PersistOutcome`, `FlowOutcome`,
-   `PersistenceMeta`/`withPersistenceMeta`, `INITIAL_VERSION`) and the port an integrator implements
-   (`TransactionRunner`, `EntityApplier`, `ApplierRegistry`, `ReadBack`, `IsTransientContention`,
-   `EngineContext`, `VersionConflict`, `MAX_RUN_EFFECTS_ATTEMPTS`) are what consumers build against. A breaking
-   change to any of them is a **semver-major**.
+2. **The adapter port is the public API.** Every export of `src/index.ts` is semver-governed: the data
+   contract (`PersistOp`, `Persistable`, `PersistOutcome`, `FlowOutcome`, `PersistenceMeta`/`withPersistenceMeta`,
+   `INITIAL_VERSION`), the port an integrator implements (`TransactionRunner`, `EntityApplier`,
+   `ApplierRegistry`, `ReadBack`, `IsTransientContention`, `EngineContext`, `PublishChange`, `VersionConflict`),
+   and the entry points and helpers (`runEffects`, `runEffectsSequence`, `SequenceOutcome`, `isRetryable`,
+   `MAX_RUN_EFFECTS_ATTEMPTS`). A breaking change to any of them is a **semver-major**; the policy is defined by
+   the index exports, so this list follows `src/index.ts` rather than the other way round.
 3. The engine stays **driver-and-consumer-free**: it depends only on `zod`, `neverthrow` and `remeda`, imports
    no database driver, and names no consumer's entities or error types. This is enforced by an ESLint
    `no-restricted-imports` rule, so a violation fails the build.
