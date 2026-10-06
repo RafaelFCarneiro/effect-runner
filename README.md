@@ -20,13 +20,13 @@ npm install @rfc0/effect-runner zod neverthrow
 ## The contract (what your domain returns)
 
 ```ts
-import type { FlowOutcome } from '@rfc0/effect-runner';
+import { PersistOp, type FlowOutcome } from '@rfc0/effect-runner';
 import { okAsync, type ResultAsync } from 'neverthrow';
 
 // A flow returns the writes as data + the response — it performs no I/O.
 const createThing = (input: Input): ResultAsync<FlowOutcome<Thing>, MyError> =>
   okAsync({
-    persist: [{ op: 'insert', entity: 'thing', model: thing, idempotencyKey }],
+    persist: [{ op: PersistOp.enum.insert, entity: 'thing', model: thing, idempotencyKey }],
     response: thing,
   });
 ```

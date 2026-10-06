@@ -7,8 +7,9 @@ design. The source of truth is [`src/persistable.ts`](../src/persistable.ts) (da
 
 ## The split the engine implements
 
-- **The domain (functional core)** decides. It returns a `FlowOutcome<T>`: a batch of `Persistable`s describing
-  the writes, plus the response the caller gets. It performs no writes.
+- **The domain (functional core)** decides. Its flow is a thunk the shell invokes, yielding a neverthrow
+  `ResultAsync<FlowOutcome<T>, E>`: domain failures stay on the error track, and on the Ok path `FlowOutcome<T>`
+  carries a batch of `Persistable`s describing the writes plus the response the caller gets. It performs no writes.
 - **The shell (`runEffects`)** executes. It applies the batch through an adapter you supply, owns atomicity,
   concurrency, idempotency and retry, and returns the response.
 
