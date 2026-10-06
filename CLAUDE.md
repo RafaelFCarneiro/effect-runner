@@ -29,7 +29,8 @@ Run a single test file: `npx vitest run test/engine.test.ts`
 npm run lint && npm run typecheck && npm run test && npm run build
 ```
 
-Before pushing, read your own diff (`git diff origin/main...HEAD`) and check it against the non-negotiables below.
+Before pushing, read your own diff (`git diff origin/main...HEAD`) and check it against the non-negotiables below
+and against `docs/code-quality.md` / `docs/code-style.md` (read the files themselves, not this summary).
 State the result in the PR description. Review is the backstop, not the gate.
 
 ## Non-negotiables
@@ -58,12 +59,15 @@ State the result in the PR description. Review is the backstop, not the gate.
    → re-run, bounded retry, idempotent duplicates, sequence partial success). Update/add tests in `test/`.
 10. **Docs in the same change.** Structural or contract changes update `docs/architecture.md`; a new decision
     gets an ADR in `docs/adr/`. Keep `README.md` examples accurate to the real signatures.
-11. **Code style:** TypeScript strict; relative imports end in `.js`; static imports at the top; comments explain
-    *why*, never *what*.
+11. **Code style:** TypeScript strict; relative imports end in `.js`; static imports at the top.
+12. **Comments are terse and say *why*, never *what*.** One or two lines is the norm; no restating types or the
+    next line, no history, no ADR/phase/ticket numbers. Longer rationale goes in `docs/architecture.md` or an ADR.
 
 ## Documentation map (read before generating)
 
 - `docs/architecture.md` — the engine as built: data contract, adapter port, semantics. Source of truth.
+- `docs/code-quality.md` and `docs/code-style.md` — quality principles and style patterns with do/don't examples.
+  Read both in full before generating code; they are mandatory, not summaries.
 - `docs/functional-core-imperative-shell.md` — the principle the engine implements. Agnostic: **no** project
   nouns, library names, ADR references, or status tracking belong in it.
 - `docs/adr/` — decisions with rationale; never contradict an accepted ADR without writing a new one.
