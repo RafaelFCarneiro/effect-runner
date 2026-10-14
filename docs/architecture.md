@@ -70,7 +70,7 @@ What an integrator implements:
   no-op (see [Change notification](#change-notification)).
 - **`ChangeBus<E = readonly string[]>`** — `{ publish(event: E); subscribe(listener) => unsubscribe }`, the transport
   behind `PublishChange`; the package ships an in-memory `createChangeBus<E>`. The default `E` is the entity-tag
-  list, so `ChangeBus` without a parameter is assignable to `PublishChange`.
+  list, so the `publish` member of a parameterless `ChangeBus` is assignable to `PublishChange`.
 
 ## Semantics
 
