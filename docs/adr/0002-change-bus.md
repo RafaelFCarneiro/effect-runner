@@ -27,6 +27,11 @@ succeeded, inviting callers to retry a write that was durable.
    `ChangeBus` cannot turn a committed write into an error. The field is optional, so existing contexts remain
    valid.
 
+5. **Generic over the event (additive).** `ChangeBus<E = readonly string[]>` and `createChangeBus<E>` let a
+   consumer carry a richer event. `PublishChange` is unchanged and the engine still publishes entity tags; a
+   consumer adapts entities to its event at the composition root. The default parameter keeps every existing use
+   compiling, so this is semver-minor.
+
 ## Consequences
 
 - Consumers get a working default transport without writing one, and a custom one through the same interface.

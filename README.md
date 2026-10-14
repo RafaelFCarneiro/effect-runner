@@ -77,6 +77,19 @@ await runEffects({ ...ctx, onPublishError: logPublishFailure }, registry, flow, 
 `createChangeBus` is an in-memory transport; implement the `ChangeBus` interface yourself for multi-process
 delivery. A failing notification never fails a committed write.
 
+The bus is generic over its event (`createChangeBus<E>()`, default `readonly string[]`). `runEffects` always
+publishes entity tags, so adapt them to your richer event once, at the composition root:
+
+```ts
+type CommitEvent = { entities: readonly string[]; at: Date };
+
+const bus = createChangeBus<CommitEvent>({ onError: logListenerFailure });
+bus.subscribe(({ entities, at }) => refresh(entities, at));
+
+const publish: PublishChange = (entities) => bus.publish({ entities, at: new Date() });
+await runEffects(ctx, registry, flow, publish);
+```
+
 `runEffectsSequence` runs a sequence of independent units (each its own transaction + retry), for batch imports.
 
 ## Documentation

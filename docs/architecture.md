@@ -68,8 +68,9 @@ What an integrator implements:
   error taxonomy.
 - **`PublishChange`** — optional post-commit hook `(entities: readonly string[]) => void`, defaulting to a
   no-op (see [Change notification](#change-notification)).
-- **`ChangeBus`** — `{ publish: PublishChange; subscribe(listener) => unsubscribe }`, the transport behind
-  `PublishChange`; the package ships an in-memory `createChangeBus`.
+- **`ChangeBus<E = readonly string[]>`** — `{ publish(event: E); subscribe(listener) => unsubscribe }`, the transport
+  behind `PublishChange`; the package ships an in-memory `createChangeBus<E>`. The default `E` is the entity-tag
+  list, so `ChangeBus` without a parameter is assignable to `PublishChange`.
 
 ## Semantics
 
@@ -118,6 +119,18 @@ its `publish` to the engine unchanged.
 const bus = createChangeBus({ onError: reportListenerFailure });
 const unsubscribe = bus.subscribe((entities) => invalidateCaches(entities));
 await runEffects({ ...ctx, onPublishError: reportPublishFailure }, registry, flow, bus.publish);
+```
+
+The bus is generic over its event. `runEffects` always calls `publish` with entity tags, so a consumer that wants a
+richer event adapts at its composition root and the engine stays unchanged; isolation and `onError` behave
+identically for any `E`.
+
+```ts
+type CommitEvent = { entities: readonly string[]; at: Date };
+
+const bus = createChangeBus<CommitEvent>({ onError: reportListenerFailure });
+const publish: PublishChange = (entities) => bus.publish({ entities, at: new Date() });
+await runEffects({ ...ctx, onPublishError: reportPublishFailure }, registry, flow, publish);
 ```
 
 ## Public API stability
