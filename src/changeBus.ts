@@ -1,11 +1,10 @@
-import type { PublishChange } from './engine.js';
 import { runIsolated } from './isolate.js';
 
-/** In-process pub/sub for committed-change notifications; `publish` plugs straight into `runEffects`. */
-export type ChangeBus = {
-  publish: PublishChange;
+/** In-process pub/sub for committed-change notifications; the default event is the entity tags `runEffects` publishes. */
+export type ChangeBus<E = readonly string[]> = {
+  publish: (event: E) => void;
   /** Registers a listener; the returned function removes it. */
-  subscribe: (listener: PublishChange) => () => void;
+  subscribe: (listener: (event: E) => void) => () => void;
 };
 
 export type ChangeBusOptions = {
@@ -14,12 +13,12 @@ export type ChangeBusOptions = {
 };
 
 /** A plain `Set` keeps the package runtime-agnostic: no `node:events`, no listener cap, no dependencies. */
-export const createChangeBus = ({ onError }: ChangeBusOptions = {}): ChangeBus => {
-  const listeners = new Set<PublishChange>();
+export const createChangeBus = <E = readonly string[]>({ onError }: ChangeBusOptions = {}): ChangeBus<E> => {
+  const listeners = new Set<(event: E) => void>();
 
   return {
     // Snapshot so (un)subscribing from inside a listener never alters the in-flight round.
-    publish: (entities) => [...listeners].forEach((listener) => runIsolated(() => listener(entities), onError)),
+    publish: (event) => [...listeners].forEach((listener) => runIsolated(() => listener(event), onError)),
     subscribe: (listener) => {
       listeners.add(listener);
       return () => {
