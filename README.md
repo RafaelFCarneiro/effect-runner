@@ -3,7 +3,7 @@
 A small, **database-agnostic** effect runner for the functional-core / imperative-shell pattern.
 
 Your domain **decides** a write and returns it as **data** — a batch of `Persistable`s (`insert` / `update` /
-`delete`, each carrying an entity tag + model) plus the response the caller should get. The **shell** —
+`delete` / `check`, each carrying an entity tag + model) plus the response the caller should get. The **shell** —
 `runEffects` — applies that batch inside one transaction, with optimistic-concurrency version guards, optional
 idempotency, and automatic retry on version conflicts and transient contention. The engine never touches a
 database itself: you plug in a tiny **adapter port** for your store (libSQL/SQLite, Postgres, anything).
@@ -34,6 +34,25 @@ const createThing = (input: Input): ResultAsync<FlowOutcome<Thing>, MyError> =>
 `withPersistenceMeta(schema)` adds the optimistic-concurrency `version` token to a model's *entity* schema;
 `INITIAL_VERSION` is where a fresh row starts.
 
+### Validating a row you only read
+
+When a decision depends on a row it doesn't write, add `checkVersion(entity, id, version)` to the batch. The
+engine validates, inside the same transaction, that the row is still at the version you read; if not, the batch
+rolls back and the flow re-runs (same bounded retry as a stale `update`). A check writes nothing and publishes
+nothing, so prefer it to rewriting an unchanged row.
+
+```ts
+import { checkVersion, PersistOp } from '@rfc0/effect-runner';
+
+persist: [checkVersion('account', account.id, account.version), { op: PersistOp.enum.insert, entity: 'entry', model: entry }]
+```
+
+Entities you check need an applier with the optional `check(tx, id, version)`: report `applied: false` when the
+row is no longer at `version`. A plain `SELECT` is not enough on a concurrent store: `check` must hold the row until
+commit (a row lock such as `FOR SHARE`, or serializable isolation with serialization failures reported as transient
+contention), otherwise two transactions can still check each other's rows and both commit. See
+[Read-set validation](docs/architecture.md#read-set-validation).
+
 ## The adapter port (what you implement for your DB)
 
 `runEffects` is generic over an opaque transaction handle `TTx` and your error type `E`. It takes an
@@ -42,7 +61,7 @@ const createThing = (input: Input): ResultAsync<FlowOutcome<Thing>, MyError> =>
 - **`TransactionRunner<TTx>`** (`ctx.runner`) — `runInTransaction(work: (tx) => Promise<T>): Promise<T>`; opens a unit of work,
   commits on success, rolls back on throw.
 - **`ApplierRegistry<TTx>`** — per entity tag, an **`EntityApplier<TTx>`** with `insert` / `update` / `delete`
-  that perform the mechanical write over `tx` and decide nothing. An applier reports `applied: false` on a stale version (the engine turns that into a
+  (and optionally `check`) that perform the mechanical write over `tx` and decide nothing. An applier reports `applied: false` on a stale version (the engine turns that into a
   `VersionConflict`), or may throw `VersionConflict` itself for a unique/FK race; the engine catches it and retries.
 - **`IsTransientContention`** (`ctx.isTransientContention`) — `(cause) => boolean`; tells the engine which driver errors are retryable
   transient contention (e.g. a busy lock).

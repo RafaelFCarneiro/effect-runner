@@ -21,14 +21,15 @@ The engine is generic over an opaque transaction handle `TTx` and the consumer's
 
 | Export | Role |
 |---|---|
-| `Persistable<Tag, Model>` | A write intent, one of three shapes (below). |
-| `PersistOp` | Zod enum `insert \| update \| delete`; construct ops via `PersistOp.enum.*`, never bare strings. |
+| `Persistable<Tag, Model>` | An effect intent, one of four shapes (below). |
+| `checkVersion(entity, id, version)` | Builds the `check` shape. |
+| `PersistOp` | Zod enum `insert \| update \| delete \| check`; construct ops via `PersistOp.enum.*`, never bare strings. |
 | `PersistOutcome` | `{ entity, applied, read? }` — what happened when one `Persistable` was applied. |
 | `FlowOutcome<T>` | `{ persist: Persistable[]; response: T \| ((outcomes: PersistOutcome[]) => T) }`. |
 | `PersistenceMeta` / `withPersistenceMeta(schema)` | The optimistic-concurrency `version` token (a non-negative int), added to an entity schema without polluting the pure model. |
 | `INITIAL_VERSION` | `0` — where a fresh row starts. |
 
-The three `Persistable` shapes:
+The four `Persistable` shapes:
 
 - `insert` — `{ op, entity, model, idempotencyKey? }`. The model carries no `version`; a new row always starts at
   `INITIAL_VERSION`, which the core does not decide. `idempotencyKey` is optional dedup metadata for the intent,
@@ -36,6 +37,8 @@ The three `Persistable` shapes:
 - `update` — `{ op, entity, model }` where `model.version` is the version the core **read**. The applier
   computes the persisted version as `model.version + 1`.
 - `delete` — `{ op, entity, id, version }`: the id plus the version read, for the same guard.
+- `check` — `{ op, entity, id, version }`: asserts the row is still at the version read and writes nothing (see
+  [Read-set validation](#read-set-validation)).
 
 `entity` is a consumer-owned tag; the shared type never enumerates entities.
 
@@ -53,7 +56,8 @@ What an integrator implements:
 - **`TransactionRunner<TTx>`** — `runInTransaction(work: (tx: TTx) => Promise<T>): Promise<T>`. Opens a unit of
   work, commits on success, rolls back when `work` throws.
 - **`EntityApplier<TTx>`** — per entity, `insert(tx, model, idempotencyKey?)`, `update(tx, model)`,
-  `delete(tx, id, version)`, each returning `{ applied, read? }`. Appliers do the mechanical write over `tx`
+  `delete(tx, id, version)`, each returning `{ applied, read? }`, plus an optional read-only
+  `check(tx, id, version)` (required only for entities a flow checks). Appliers do the mechanical write over `tx`
   and decide nothing; they do not state their own entity tag (the engine stamps it from the `Persistable`).
 - **`ApplierRegistry<TTx>`** — `Record<string, EntityApplier<TTx>>`, keyed by entity tag. Adding an entity is
   registration, never a new branch in the engine. An unregistered tag throws.
@@ -98,6 +102,32 @@ through its own transaction and its own bounded retry — identical semantics to
 `flowFor(item)` is invoked only once earlier items have committed or failed, so unit *i+1* sees unit *i*'s
 writes. A unit's domain error or retry exhaustion is recorded as an `Err` and the loop continues (partial
 success); only an unexpected failure throws. It returns a neverthrow `Result<T, E>` per item.
+
+## Read-set validation
+
+A `check` guards a row the decision *read* but does not *write*. Optimistic concurrency on writes alone cannot see
+that: if a decision depends on row A (a balance, a parent's status) but only writes row B, a concurrent change to A
+commits cleanly and the decision is stale (write skew). A `check` closes that gap by validating the read set inside
+the same transaction as the writes.
+
+The guarantee holds only if the applier's `check` keeps the row from changing until commit. A plain version `SELECT`
+does not: under READ COMMITTED or snapshot isolation two transactions can check each other's rows, update different
+rows, and both commit. The applier must therefore either lock the row (e.g. `SELECT … FOR SHARE`/`FOR UPDATE`, so
+a concurrent writer blocks) or run under serializable isolation, with serialization failures classified as
+retryable by `isTransientContention`. On a single-writer store (e.g. SQLite) the transaction already serializes.
+
+The engine calls the entity's `check(tx, id, version)` in batch order. `applied: false` raises `VersionConflict`,
+so the batch rolls back and the flow re-runs through the normal bounded retry (`MAX_RUN_EFFECTS_ATTEMPTS`, then
+`ctx.conflictError()`). A check writes nothing, yields no `PersistOutcome`, and its entity never appears in the
+published change set. A `check` for an entity whose applier lacks `check` throws a plain `Error` (a programming
+error, not retried).
+
+Use it instead of rewriting the row (`update` with an unchanged model) when the row was only read: that bumps its
+version, needlessly conflicts with other readers, and publishes a change that did not happen.
+
+```ts
+persist: [checkVersion('account', account.id, account.version), { op: PersistOp.enum.insert, entity: 'entry', model: entry }]
+```
 
 ## Change notification
 
