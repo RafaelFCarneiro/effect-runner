@@ -30,7 +30,11 @@ export type Persistable<Tag extends string = string, Model = unknown> =
   | { op: typeof PersistOp.enum.check; entity: Tag; id: string; version: number };
 
 /** Builds a `check` persistable: the batch conflicts and retries if the row has moved past `version`. */
-export const checkVersion = <Tag extends string>(entity: Tag, id: string, version: number): Persistable<Tag> => ({
+export const checkVersion = <Tag extends string>(
+  entity: Tag,
+  id: string,
+  version: number,
+): Extract<Persistable<Tag>, { op: typeof PersistOp.enum.check }> => ({
   op: PersistOp.enum.check,
   entity,
   id,

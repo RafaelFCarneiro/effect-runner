@@ -268,14 +268,49 @@ describe('read-version check', () => {
     expect(calls).toEqual(['check:first', 'insert:thing', 'check:second']);
   });
 
-  it('rolls back earlier writes when a later check is stale', async () => {
-    const { ctx, registry, calls } = makeHarness();
-    const flow = flowOf([insertThing, checkVersion('guard', 'g-1', STALE_VERSION)]);
+  it('commits nothing when a later check is stale, with every write in the same transaction', async () => {
+    const committed: string[] = [];
+    const publish = vi.fn();
+    const transactionsSeen = new Set<object>();
+    const ctx: EngineContext<string[], string> = {
+      runner: {
+        runInTransaction: async (work) => {
+          const staged: string[] = [];
+          transactionsSeen.add(staged);
+          const result = await work(staged);
+          committed.push(...staged);
+          return result;
+        },
+      },
+      isTransientContention: () => false,
+      conflictError: () => 'conflict',
+    };
+    const registry: ApplierRegistry<string[]> = {
+      thing: {
+        insert: async (staged) => {
+          staged.push('thing');
+          return { applied: true };
+        },
+        update: async () => ({ applied: true }),
+        delete: async () => ({ applied: true }),
+      },
+      guard: {
+        insert: async () => ({ applied: true }),
+        update: async () => ({ applied: true }),
+        delete: async () => ({ applied: true }),
+        check: async (staged, _id, version) => {
+          expect(staged).toContain('thing');
+          return { applied: version === CURRENT_VERSION };
+        },
+      },
+    };
 
-    const result = await runEffects(ctx, registry, flow);
+    const result = await runEffects(ctx, registry, flowOf([insertThing, checkVersion('guard', 'g-1', STALE_VERSION)]), publish);
 
     expect(result._unsafeUnwrapErr()).toBe('conflict');
-    expect(calls.filter((call) => call === 'insert:thing')).toHaveLength(MAX_RUN_EFFECTS_ATTEMPTS);
+    expect(committed).toEqual([]);
+    expect(transactionsSeen.size).toBe(MAX_RUN_EFFECTS_ATTEMPTS);
+    expect(publish).not.toHaveBeenCalled();
   });
 
   it('throws a clear programming error when the applier has no check', async () => {

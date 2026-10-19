@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkVersion, PersistenceMeta, PersistOp, withPersistenceMeta } from '../src/persistable.js';
+import { checkVersion, type Persistable, PersistenceMeta, PersistOp, withPersistenceMeta } from '../src/persistable.js';
 import { z } from 'zod';
 
 const TagSchema = z.object({ id: z.string().min(1), name: z.string().min(1) });
@@ -27,5 +27,10 @@ describe('a pure model', () => {
 describe('checkVersion', () => {
   it('builds a check persistable carrying the entity, id and version read', () => {
     expect(checkVersion('account', 'acc-1', 4)).toEqual({ op: PersistOp.enum.check, entity: 'account', id: 'acc-1', version: 4 });
+  });
+
+  it('is assignable to a model-typed batch', () => {
+    const batch: Persistable<'account', { id: string }>[] = [checkVersion('account', 'acc-1', 4)];
+    expect(batch).toHaveLength(1);
   });
 });

@@ -48,7 +48,10 @@ persist: [checkVersion('account', account.id, account.version), { op: PersistOp.
 ```
 
 Entities you check need an applier with the optional `check(tx, id, version)`: report `applied: false` when the
-row is no longer at `version`.
+row is no longer at `version`. A plain `SELECT` is not enough on a concurrent store: `check` must hold the row until
+commit (a row lock such as `FOR SHARE`, or serializable isolation with serialization failures reported as transient
+contention), otherwise two transactions can still check each other's rows and both commit. See
+[Read-set validation](docs/architecture.md#read-set-validation).
 
 ## The adapter port (what you implement for your DB)
 

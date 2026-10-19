@@ -37,7 +37,9 @@ export type EntityApplier<TTx> = {
   insert: (tx: TTx, model: unknown, idempotencyKey?: string) => Promise<ApplierOutcome>;
   update: (tx: TTx, model: unknown) => Promise<ApplierOutcome>;
   delete: (tx: TTx, id: string, version: number) => Promise<ApplierOutcome>;
-  /** Read-only: `applied: false` when the row is no longer at `version`. Required only for entities a flow checks. */
+  /** Read-only: `applied: false` when the row is no longer at `version`. Required only for entities a flow checks.
+   *  Must hold the row against concurrent change until commit (e.g. a row lock, or a serializable transaction whose
+   *  serialization failures `isTransientContention` classifies as retryable); a bare read leaves write skew open. */
   check?: (tx: TTx, id: string, version: number) => Promise<ApplierOutcome>;
 };
 
@@ -61,9 +63,9 @@ type CheckPersistable = Extract<Persistable, { op: typeof PersistOp.enum.check }
 
 // A check writes nothing, so it yields no PersistOutcome and never reaches the published change set.
 const verifyRead = async <TTx>(tx: TTx, registry: ApplierRegistry<TTx>, p: CheckPersistable): Promise<void> => {
-  const { check } = resolveApplier(registry, p.entity);
-  if (!check) throw new Error(`runEffects: applier for entity "${p.entity}" does not implement check`);
-  const outcome = await check(tx, p.id, p.version);
+  const applier = resolveApplier(registry, p.entity);
+  if (!applier.check) throw new Error(`runEffects: applier for entity "${p.entity}" does not implement check`);
+  const outcome = await applier.check(tx, p.id, p.version);
   if (!outcome.applied) throw new VersionConflict();
 };
 

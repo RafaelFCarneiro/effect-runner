@@ -110,6 +110,12 @@ that: if a decision depends on row A (a balance, a parent's status) but only wri
 commits cleanly and the decision is stale (write skew). A `check` closes that gap by validating the read set inside
 the same transaction as the writes.
 
+The guarantee holds only if the applier's `check` keeps the row from changing until commit. A plain version `SELECT`
+does not: under READ COMMITTED or snapshot isolation two transactions can check each other's rows, update different
+rows, and both commit. The applier must therefore either lock the row (e.g. `SELECT … FOR SHARE`/`FOR UPDATE`, so
+a concurrent writer blocks) or run under serializable isolation, with serialization failures classified as
+retryable by `isTransientContention`. On a single-writer store (e.g. SQLite) the transaction already serializes.
+
 The engine calls the entity's `check(tx, id, version)` in batch order. `applied: false` raises `VersionConflict`,
 so the batch rolls back and the flow re-runs through the normal bounded retry (`MAX_RUN_EFFECTS_ATTEMPTS`, then
 `ctx.conflictError()`). A check writes nothing, yields no `PersistOutcome`, and its entity never appears in the
