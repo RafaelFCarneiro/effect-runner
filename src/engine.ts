@@ -37,6 +37,8 @@ export type EntityApplier<TTx> = {
   insert: (tx: TTx, model: unknown, idempotencyKey?: string) => Promise<ApplierOutcome>;
   update: (tx: TTx, model: unknown) => Promise<ApplierOutcome>;
   delete: (tx: TTx, id: string, version: number) => Promise<ApplierOutcome>;
+  /** Read-only: `applied: false` when the row is no longer at `version`. Required only for entities a flow checks. */
+  check?: (tx: TTx, id: string, version: number) => Promise<ApplierOutcome>;
 };
 
 /** Entity tag → applier. Adding an entity is registration, never a new engine branch. */
@@ -55,10 +57,20 @@ const resolveApplier = <TTx>(registry: ApplierRegistry<TTx>, entity: string): En
   return applier;
 };
 
+type CheckPersistable = Extract<Persistable, { op: typeof PersistOp.enum.check }>;
+
+// A check writes nothing, so it yields no PersistOutcome and never reaches the published change set.
+const verifyRead = async <TTx>(tx: TTx, registry: ApplierRegistry<TTx>, p: CheckPersistable): Promise<void> => {
+  const { check } = resolveApplier(registry, p.entity);
+  if (!check) throw new Error(`runEffects: applier for entity "${p.entity}" does not implement check`);
+  const outcome = await check(tx, p.id, p.version);
+  if (!outcome.applied) throw new VersionConflict();
+};
+
 const applyPersistable = async <TTx>(
   tx: TTx,
   registry: ApplierRegistry<TTx>,
-  p: Persistable,
+  p: Exclude<Persistable, CheckPersistable>,
 ): Promise<PersistOutcome> => {
   const applier = resolveApplier(registry, p.entity);
   const outcome = await (async (): Promise<ApplierOutcome> => {
@@ -101,7 +113,10 @@ const applyBatch = async <TTx>(
   const outcomes: PersistOutcome[] = [];
   try {
     await runner.runInTransaction(async (tx) => {
-      for (const p of persist) outcomes.push(await applyPersistable(tx, registry, p));
+      for (const p of persist) {
+        if (p.op === PersistOp.enum.check) await verifyRead(tx, registry, p);
+        else outcomes.push(await applyPersistable(tx, registry, p));
+      }
     });
     return { applied: true, outcomes };
   } catch (cause) {

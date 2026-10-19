@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-/** Write intent; construct via `.enum.*`, never a bare string. */
-export const PersistOp = z.enum(['insert', 'update', 'delete']);
+/** Effect intent (`check` is a read-set guard, not a write); construct via `.enum.*`, never a bare string. */
+export const PersistOp = z.enum(['insert', 'update', 'delete', 'check']);
 export type PersistOp = z.infer<typeof PersistOp>;
 
 /** Where every new row starts. Supplied by the adapter when shaping the insert row, not by the core. */
@@ -20,12 +20,22 @@ export const withPersistenceMeta = <T extends z.ZodRawShape>(model: z.ZodObject<
  * A write intent handed from the core to the shell. Generic over the consumer's entity tag and model.
  * `insert` carries no `version` (a new row starts at `INITIAL_VERSION`); `idempotencyKey` is optional dedup
  * metadata, not a model field. `update` carries the full end-state, where `model.version` is the version read
- * (the applier writes `version + 1` guarded on it); `delete` carries the id and version read.
+ * (the applier writes `version + 1` guarded on it); `delete` carries the id and version read. `check` asserts a
+ * row is still at the version read, without writing it.
  */
 export type Persistable<Tag extends string = string, Model = unknown> =
   | { op: typeof PersistOp.enum.insert; entity: Tag; model: Model; idempotencyKey?: string }
   | { op: typeof PersistOp.enum.update; entity: Tag; model: Model & { version: number } }
-  | { op: typeof PersistOp.enum.delete; entity: Tag; id: string; version: number };
+  | { op: typeof PersistOp.enum.delete; entity: Tag; id: string; version: number }
+  | { op: typeof PersistOp.enum.check; entity: Tag; id: string; version: number };
+
+/** Builds a `check` persistable: the batch conflicts and retries if the row has moved past `version`. */
+export const checkVersion = <Tag extends string>(entity: Tag, id: string, version: number): Persistable<Tag> => ({
+  op: PersistOp.enum.check,
+  entity,
+  id,
+  version,
+});
 
 /** Result of applying one `Persistable`. `applied: false` marks an idempotent duplicate, with `read` reflecting
  *  the existing row. A stale update/delete never reports an outcome; it conflicts and retries. */
