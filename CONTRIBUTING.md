@@ -32,5 +32,5 @@ function, and comments that say *why* in a line or two.
 ## The public API
 
 The data contract and adapter port described in [docs/architecture.md](docs/architecture.md) are the public API.
-Changing them in a breaking way is a semver-major (see [ADR 0001](docs/adr/0001-extracted-from-fintrack.md)).
+Changing them in a breaking way is a semver-major (see [ADR 0001](docs/adr/0001-extracted-from-an-application.md)).
 Add tests alongside any behaviour change.

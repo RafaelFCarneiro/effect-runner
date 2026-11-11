@@ -1,8 +1,8 @@
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
-// The engine is driver-free by contract (it carried this ban out of FinTrack, ADR-030): it depends
-// only on zod / neverthrow / remeda and must never import a database driver. A driver import here is
+// The engine is driver-free by contract (it carried this ban out of the application it was extracted from):
+// it depends only on zod / neverthrow / remeda and must never import a database driver. A driver import here is
 // the whole point of the package being swappable — keep it a build error.
 export default tseslint.config(
   { ignores: ['dist/**', 'coverage/**'] },

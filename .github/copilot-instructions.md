@@ -78,11 +78,12 @@ State the result in the PR description. Review is the backstop, not the gate.
 - `docs/adr/` — decisions with rationale; never contradict an accepted ADR without writing a new one.
 - `CONTRIBUTING.md` — conventions for human contributors; consistent with this file.
 
-## Keep docs and source FinTrack-free
+## Keep docs and source consumer-free
 
 The engine was extracted from an application, but its docs and source describe the **generic** engine only.
 Never mention the originating application's domain (its entities, tools, storage choices) in `src/`, `test/`,
-`docs/`, or the README. The single sanctioned reference is the "extracted from" credit (README "Why", ADR 0001).
+`docs/`, or the README. The single sanctioned reference is the generic "extracted from" credit
+(README "Why", ADR 0001), which names no application.
 
 ## Process
 
