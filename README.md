@@ -116,7 +116,7 @@ await runEffects(ctx, registry, flow, publish);
 - [Architecture](docs/architecture.md) — the engine's data contract, adapter port, and semantics
 - [Functional Core, Imperative Shell](docs/functional-core-imperative-shell.md) — the principle it implements
 - [Contributing](CONTRIBUTING.md) — conventions and the pre-PR gate
-- [ADR 0001](docs/adr/0001-extracted-from-fintrack.md) — why it exists and what counts as the public API
+- [ADR 0001](docs/adr/0001-extracted-from-an-application.md) — why it exists and what counts as the public API
 - [ADR 0002](docs/adr/0002-change-bus.md) — the change bus and post-commit failure isolation
 
 ## Why

@@ -15,7 +15,7 @@ design. The source of truth is [`src/persistable.ts`](../src/persistable.ts) (da
 
 The engine is generic over an opaque transaction handle `TTx` and the consumer's error type `E`. It imports only
 `zod`, `neverthrow` and `remeda`, and never a database driver (lint-enforced; see
-[ADR 0001](adr/0001-extracted-from-fintrack.md)).
+[ADR 0001](adr/0001-extracted-from-an-application.md)).
 
 ## The data contract
 
@@ -167,4 +167,4 @@ await runEffects({ ...ctx, onPublishError: reportPublishFailure }, registry, flo
 
 Every export of `src/index.ts` — the data contract, the adapter port, and the entry points above — is the
 package's public API and semver-governed. See
-[ADR 0001](adr/0001-extracted-from-fintrack.md).
+[ADR 0001](adr/0001-extracted-from-an-application.md).
