@@ -32,6 +32,8 @@ type Cursor = { lastId: number; token: unknown };
 const describeSkipped = ({ id, skipped }: ChangeLogSkipped): Error =>
   new Error(`change log record ${id} skipped: ${skipped}`);
 
+const isPositiveInteger = (value: number): boolean => Number.isSafeInteger(value) && value > 0;
+
 // Timers are unref'd only where the runtime has `unref`, so the package needs no Node-only import.
 const unrefIfSupported = (timer: unknown): void => {
   const unref = (timer as { unref?: unknown } | null | undefined)?.unref;
@@ -66,6 +68,8 @@ export const startChangeRelay = async <E>({
   clock = () => new Date(),
   onError,
 }: ChangeRelayOptions<E>): Promise<ChangeRelay> => {
+  // A zero or fractional limit would stall delivery or mistake a full batch for a drained backlog.
+  if (!isPositiveInteger(batchLimit)) throw new RangeError(`batchLimit must be a positive integer, got ${batchLimit}`);
   const report = (cause: unknown): void => runIsolated(() => onError?.(cause));
   const cursor: Cursor = { lastId: await store.latestId(), token: UNREAD_TOKEN };
 

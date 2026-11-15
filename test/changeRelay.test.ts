@@ -78,6 +78,14 @@ describe('startChangeRelay', () => {
     expect(store.calls.readAfter).toHaveLength(0);
   });
 
+  it.each([0, -1, 2.5, Number.NaN, Number.POSITIVE_INFINITY])('rejects batchLimit %s before touching the store', async (batchLimit) => {
+    const store = createMemoryChangeLogStore<Event>();
+    const { relay } = start(store, { batchLimit });
+
+    await expect(relay).rejects.toThrow(RangeError);
+    expect(store.calls.latestId).toBe(0);
+  });
+
   it('does not replay records written before it started', async () => {
     const store = createMemoryChangeLogStore<Event>();
     store.write(OTHER, { name: 'old' });
