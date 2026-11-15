@@ -176,6 +176,9 @@ records become readable in increasing id order, because the relay's cursor is th
 `INTEGER PRIMARY KEY AUTOINCREMENT` (a plain rowid reuses max+1 once the newest rows are deleted); a store with
 concurrent writers whose ids can commit out of order (a Postgres sequence, say) does not satisfy it as is.
 
+`readAfter` returns fewer than `limit` entries only when none remain (the relay treats a short batch as drained), so a
+store must not cap its page below `limit`.
+
 - `createRelayedChangeBus({ store, origin, clock?, onError?, shouldAppend? })` returns `{ bus, publishLocal, settled }`.
   `bus.publish` queues the append and then delivers to local subscribers (the same isolation as `createChangeBus`):
   queued before delivery, so a listener that publishes in turn cannot reorder the log, and run after it. Appends run

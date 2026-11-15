@@ -18,7 +18,10 @@ export type NewChangeLogRecord<E> = { event: E; origin: string; createdAt: strin
 export type ChangeLogStore<E> = {
   append: (record: NewChangeLogRecord<E>) => Promise<void>;
   latestId: () => Promise<number>;
-  /** Entries past `afterId` not written by `excludeOrigin`, in id order, at most `limit`. */
+  /**
+   * Entries past `afterId` not written by `excludeOrigin`, in id order, up to `limit`. Fewer than `limit` means none
+   * remain: the relay stops draining on a short batch, so a store must not cap its page below `limit`.
+   */
   readAfter: (afterId: number, excludeOrigin: string, limit: number) => Promise<readonly ChangeLogEntry<E>[]>;
   /** Deletes records created before the ISO instant. */
   pruneBefore: (isoInstant: string) => Promise<void>;

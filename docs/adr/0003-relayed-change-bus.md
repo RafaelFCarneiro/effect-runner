@@ -49,7 +49,8 @@ the in-process bus.
    with concurrent writers whose ids can commit out of order (a Postgres sequence, say) does not satisfy the
    contract as is. A record the store cannot decode is returned as `skipped` with its id and the
    reason, never thrown, so one bad record cannot block the ones after it. The store owns its connections and their
-   lifetime; the package never opens or closes anything.
+   lifetime; the package never opens or closes anything. `readAfter` returns fewer than `limit` entries only when
+   none remain, because the relay treats a short batch as drained; a store must not cap its page below `limit`.
 
 2. **`createRelayedChangeBus<E>`** returns `{ bus, publishLocal, settled }`:
    - `bus` is a `ChangeBus<E>`. `publish` queues the append and then delivers to local subscribers through the same
