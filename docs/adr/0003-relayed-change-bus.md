@@ -80,6 +80,76 @@ the in-process bus.
 ADR 0002 §3 now reads: a deployment spanning processes either uses `createRelayedChangeBus` with its own
 `ChangeLogStore`, or implements `ChangeBus` over another transport; the engine does not change either way.
 
+## How it fits together
+
+What the package provides (inside each process) and what the consumer provides (the store). Two processes share one
+store; each has its own local bus and subscribers.
+
+```mermaid
+flowchart LR
+  Q[("ChangeLogStore<br/>(consumer's)")]
+  subgraph A["Process A (writes)"]
+    EA["runEffects<br/>(engine)"] -->|"publish(event)<br/>after commit"| BA["relayed bus"]
+    BA -->|"1 · local, immediate"| SA["A's subscribers"]
+    BA -->|"2 · queued append<br/>(best-effort, in order)"| Q
+  end
+  subgraph B["Process B (serves subscribers)"]
+    RB["relay<br/>(every pollMs)"] -->|"changeToken · readAfter<br/>(not own origin)"| Q
+    RB -->|"publishLocal(event)<br/>(never appended again)"| LB["B's local bus"]
+    LB --> SB["B's subscribers"]
+  end
+```
+
+A write in A reaching a subscriber in B:
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant E as Engine (A)
+  participant Bus as Relayed bus (A)
+  participant SubA as Subscribers (A)
+  participant S as ChangeLogStore
+  participant R as Relay (B)
+  participant SubB as Subscribers (B)
+
+  E->>Bus: publish(event), after the commit
+  Bus->>SubA: deliver now (isolated)
+  Bus-)S: append {event, origin A, createdAt}<br/>queued, never awaited by publish
+  Note over Bus,S: a failed append → onError, publish has already returned
+  loop every pollMs
+    R->>S: changeToken()
+    alt token unchanged
+      Note over R: nothing to read
+    else token changed (or first tick)
+      R->>S: readAfter(cursor, not origin B, batchLimit)
+      S-->>R: records + skipped
+      R->>SubB: publishLocal(event) for each record
+      Note over R: skipped → onError · cursor moves past both
+    end
+  end
+```
+
+One relay tick, in detail:
+
+```mermaid
+flowchart TD
+  T(["tick (every pollMs)"]) --> Busy{"previous tick<br/>still running?"}
+  Busy -- yes --> Skip(["skip this tick"])
+  Busy -- no --> Tok{"store has<br/>changeToken?"}
+  Tok -- no --> Read
+  Tok -- yes --> Chg{"token changed<br/>since last read?"}
+  Chg -- no --> Done(["done"])
+  Chg -- yes --> Read["readAfter(cursor, excludeOrigin, batchLimit)"]
+  Read --> Plan["planRelayBatch: events · skipped · next cursor"]
+  Plan --> Pub["publishLocal each event<br/>report each skipped to onError"]
+  Pub --> Full{"batch full?"}
+  Full -- yes --> Keep["leave token unrecorded<br/>(next tick drains)"] --> Done
+  Full -- no --> Rec["record token"] --> Done
+  Read -.->|"throws"| Err["onError, next tick still runs"]
+```
+
+Pruning runs on its own timer, never overlapping itself: every `pruneEveryMs`, `pruneBefore(now − retentionMs)`.
+
 ## Consequences
 
 - A consumer that spans processes writes only its store: a table (or equivalent), its queries, its decoding, and

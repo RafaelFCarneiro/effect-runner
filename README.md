@@ -148,7 +148,7 @@ await relay.stop();
 await settled();
 ```
 
-Delivery across processes is at-most-once and best-effort; see [ADR 0003](docs/adr/0003-relayed-change-bus.md).
+Delivery across processes is at-most-once and best-effort. See [Across processes](docs/architecture.md#across-processes) for the port, the guarantees and how the pieces fit together, and [ADR 0003](docs/adr/0003-relayed-change-bus.md) for the decision.
 
 `runEffectsSequence` runs a sequence of independent units (each its own transaction + retry), for batch imports.
 
