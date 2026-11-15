@@ -177,7 +177,7 @@ process may have written).
   and a throwing `onError` is dropped. `publishLocal` skips the append. `settled()` resolves when every requested
   append has finished or failed.
 - `startChangeRelay({ store, publishLocal, origin, pollMs, retentionMs, pruneEveryMs, batchLimit, clock?, onError? })`
-  resolves to `{ stop }` (rejecting with a `RangeError` if `batchLimit` is not a positive integer) once its cursor (`latestId()`) is set: nothing before it is replayed. Each tick reads the
+  resolves to `{ stop }` (rejecting with a `RangeError` for a non-positive-integer `batchLimit`, a `pollMs` or `pruneEveryMs` that is not a positive integer within the timer range, or a negative or non-finite `retentionMs`) once its cursor (`latestId()`) is set: nothing before it is replayed. Each tick reads the
   change token when the store has one and reads records only when it changed (no token: every tick), excluding its own
   origin. Decoded events go to `publishLocal` (so they are never re-appended), skipped records go to `onError`, and the
   cursor passes both. A full batch leaves the token unrecorded so the next tick drains the rest. Ticks and prunes

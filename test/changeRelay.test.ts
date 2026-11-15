@@ -86,6 +86,23 @@ describe('startChangeRelay', () => {
     expect(store.calls.latestId).toBe(0);
   });
 
+  it.each([
+    ['pollMs', 0],
+    ['pollMs', 2 ** 31],
+    ['pruneEveryMs', -5],
+    ['pruneEveryMs', 30 * 24 * 60 * 60 * 1000],
+    ['retentionMs', -1],
+    ['retentionMs', Number.POSITIVE_INFINITY],
+    ['retentionMs', Number.NaN],
+  ])('rejects %s %s before touching the store', async (name, value) => {
+    const store = createMemoryChangeLogStore<Event>();
+    const { relay } = start(store, { [name]: value });
+
+    await expect(relay).rejects.toThrow(RangeError);
+    await expect(relay).rejects.toThrow(name);
+    expect(store.calls.latestId).toBe(0);
+  });
+
   it('does not replay records written before it started', async () => {
     const store = createMemoryChangeLogStore<Event>();
     store.write(OTHER, { name: 'old' });

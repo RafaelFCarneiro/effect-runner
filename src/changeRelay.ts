@@ -33,7 +33,20 @@ type Cursor = { lastId: number; token: unknown };
 const describeSkipped = ({ id, skipped }: ChangeLogSkipped): Error =>
   new Error(`change log record ${id} skipped: ${skipped}`);
 
-const BatchLimit = z.number().int().positive();
+// The largest delay `setInterval` honors; beyond it the timer fires almost at once.
+const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
+// Keeps `now - retention` a valid Date, so a prune can always build its cutoff.
+const MAX_RETENTION_MS = 4e15;
+
+const RelayTimings = z.object({
+  pollMs: z.number().int().positive().max(MAX_TIMER_DELAY_MS),
+  pruneEveryMs: z.number().int().positive().max(MAX_TIMER_DELAY_MS),
+  retentionMs: z.number().nonnegative().max(MAX_RETENTION_MS),
+  batchLimit: z.number().int().positive(),
+});
+
+const describeInvalid = ({ issues }: z.ZodError): string =>
+  `invalid change relay options: ${issues.map(({ path, message }) => `${path.join('.')} ${message}`).join('; ')}`;
 
 // Timers are unref'd only where the runtime has `unref`, so the package needs no Node-only import.
 const unrefIfSupported = (timer: unknown): void => {
@@ -69,9 +82,10 @@ export const startChangeRelay = async <E>({
   clock = () => new Date(),
   onError,
 }: ChangeRelayOptions<E>): Promise<ChangeRelay> => {
-  // A zero or fractional limit would stall delivery or mistake a full batch for a drained backlog.
-  const limit = BatchLimit.safeParse(batchLimit);
-  if (!limit.success) throw new RangeError(`batchLimit must be a positive integer, got ${batchLimit}`);
+  // A zero or fractional limit stalls delivery, a negative retention deletes fresh records, and an out-of-range
+  // delay makes a timer fire at once: reject before the store or a timer is touched.
+  const timings = RelayTimings.safeParse({ pollMs, pruneEveryMs, retentionMs, batchLimit });
+  if (!timings.success) throw new RangeError(describeInvalid(timings.error));
   const report = (cause: unknown): void => runIsolated(() => onError?.(cause));
   const cursor: Cursor = { lastId: await store.latestId(), token: UNREAD_TOKEN };
 
