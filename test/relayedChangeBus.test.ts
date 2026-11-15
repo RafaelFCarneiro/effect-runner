@@ -42,6 +42,19 @@ describe('createRelayedChangeBus', () => {
     expect(store.rows.map((row) => (row.entry as { event: Event }).event.name)).toEqual(['first', 'second']);
   });
 
+  it('keeps publish order in the log when a listener publishes in turn', async () => {
+    const store = createMemoryChangeLogStore<Event>();
+    const { bus, settled } = createRelayedChangeBus<Event>({ store, origin: ORIGIN });
+    bus.subscribe((event) => {
+      if (event.name === 'first') bus.publish({ name: 'nested' });
+    });
+
+    bus.publish({ name: 'first' });
+    await settled();
+
+    expect(store.rows.map((row) => (row.entry as { event: Event }).event.name)).toEqual(['first', 'nested']);
+  });
+
   it('never awaits an append in publish', () => {
     const store = createMemoryChangeLogStore<Event>();
     store.hooks.append = () => new Promise(() => undefined);

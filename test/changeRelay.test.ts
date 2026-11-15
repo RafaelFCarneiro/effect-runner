@@ -292,6 +292,25 @@ describe('startChangeRelay', () => {
     await stop();
   });
 
+  it('reports a synchronously throwing prune and prunes again', async () => {
+    const store = createMemoryChangeLogStore<Event>();
+    const failure = new Error('sync prune');
+    store.pruneBefore = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        throw failure;
+      })
+      .mockResolvedValue(undefined);
+    const { relay, onError } = start(store);
+    const { stop } = await relay;
+
+    await vi.advanceTimersByTimeAsync(PRUNE_MS * 2);
+
+    expect(onError).toHaveBeenCalledWith(failure);
+    expect(store.pruneBefore).toHaveBeenCalledTimes(2);
+    await stop();
+  });
+
   it('stop waits for the tick in flight and stops the timers', async () => {
     const store = createMemoryChangeLogStore<Event>();
     const gate = deferred();

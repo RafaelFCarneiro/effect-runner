@@ -44,8 +44,9 @@ export const createRelayedChangeBus = <E>({
   return {
     bus: {
       publish: (event) => {
-        local.publish(event);
+        // Queued before delivery so a listener that publishes in turn cannot reorder the log; the append itself still runs after.
         appendLater(event);
+        local.publish(event);
       },
       subscribe: local.subscribe,
     },

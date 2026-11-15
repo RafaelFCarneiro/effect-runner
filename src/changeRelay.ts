@@ -44,7 +44,9 @@ const repeating = (report: (cause: unknown) => void, work: () => Promise<void>) 
   const run = (): void => {
     if (state.busy) return;
     state.busy = true;
-    state.running = work()
+    // Via a continuation so a synchronous throw is reported and resets `busy` like a rejection.
+    state.running = Promise.resolve()
+      .then(work)
       .catch(report)
       .finally(() => {
         state.busy = false;
