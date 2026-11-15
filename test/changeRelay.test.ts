@@ -303,6 +303,21 @@ describe('startChangeRelay', () => {
     await stop();
   });
 
+  it('keeps delivering after a prune, since ids are never reused', async () => {
+    const store = createMemoryChangeLogStore<Event>();
+    store.write(OTHER, { name: 'old' }, '2026-01-01T00:00:00.000Z');
+    const { relay, published } = start(store);
+    const { stop } = await relay;
+
+    await vi.advanceTimersByTimeAsync(PRUNE_MS);
+    expect(store.rows).toHaveLength(0);
+    store.write(OTHER, { name: 'after prune' });
+    await tick();
+
+    expect(published).toEqual([{ name: 'after prune' }]);
+    await stop();
+  });
+
   it('reports a failing prune and prunes again', async () => {
     const store = createMemoryChangeLogStore<Event>();
     const failure = new Error('prune failed');

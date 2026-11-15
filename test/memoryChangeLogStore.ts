@@ -17,7 +17,9 @@ export const createMemoryChangeLogStore = <E>({ withToken = true }: { withToken?
   const calls: MemoryChangeLogStore<E>['calls'] = { append: 0, latestId: 0, readAfter: [], changeToken: 0, pruneBefore: [] };
   const token = { value: 0 as unknown };
   const hooks: MemoryChangeLogStore<E>['hooks'] = {};
-  const nextId = (): number => rows.length + 1;
+  // Monotonic like a real log: pruning must never let an id be reused.
+  const counter = { last: 0 };
+  const nextId = (): number => ++counter.last;
 
   const write = (origin: string, event: E, createdAt = new Date(0).toISOString()): number => {
     const id = nextId();
@@ -46,7 +48,7 @@ export const createMemoryChangeLogStore = <E>({ withToken = true }: { withToken?
     latestId: async () => {
       calls.latestId += 1;
       await hooks.latestId?.();
-      return rows.at(-1)?.id ?? 0;
+      return counter.last;
     },
     readAfter: async (afterId, excludeOrigin, limit) => {
       calls.readAfter.push({ afterId, excludeOrigin, limit });
