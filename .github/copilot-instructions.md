@@ -46,7 +46,9 @@ State the result in the PR description. Review is the backstop, not the gate.
 2. **The adapter port is the public API.** Every export of `src/index.ts` is semver-governed — the data contract
    (`Persistable`, `PersistOutcome`, `FlowOutcome`, `PersistOp`, `PersistenceMeta`/`withPersistenceMeta`,
    `INITIAL_VERSION`), the port (`TransactionRunner`, `EntityApplier`, `ApplierRegistry`, `ReadBack`,
-   `IsTransientContention`, `EngineContext`, `PublishChange`, `VersionConflict`), and the entry points/helpers
+   `IsTransientContention`, `EngineContext`, `PublishChange`, `VersionConflict`), the change bus (`ChangeBus`,
+   `ChangeBusOptions`, `createChangeBus`), the cross-process bus (`ChangeLogStore`, `createRelayedChangeBus`,
+   `startChangeRelay`, `planRelayBatch`, `pruneCutoff`, `shouldRead`, and their types), and the entry points/helpers
    (`runEffects`, `runEffectsSequence`, `SequenceOutcome`, `isRetryable`, `MAX_RUN_EFFECTS_ATTEMPTS`). A breaking
    change is a major bump — flag it explicitly and never make one casually (ADR 0001).
 3. **The engine owns no error taxonomy.** Retry exhaustion is mapped through the injected `conflictError`

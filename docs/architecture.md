@@ -163,6 +163,116 @@ const publish: PublishChange = (entities) => bus.publish({ entities, at: new Dat
 await runEffects({ ...ctx, onPublishError: reportPublishFailure }, registry, flow, publish);
 ```
 
+## Across processes
+
+`createChangeBus` is process-local. For writers in several processes over one store, the package supplies the
+mechanics and the consumer supplies a `ChangeLogStore<E>` (see [ADR 0003](adr/0003-relayed-change-bus.md)): `append`,
+`latestId`, `readAfter` (entries past a cursor, excluding an origin, in id order; an undecodable record is returned as
+`{ id, skipped }`, never thrown), `pruneBefore`, and an optional `changeToken` (any value that changes when another
+process may have written).
+
+The id contract: `id` strictly increases, is never reused (even after pruning removes the newest records), and
+records become readable in increasing id order, because the relay's cursor is the last id it saw. SQLite needs
+`INTEGER PRIMARY KEY AUTOINCREMENT` (a plain rowid reuses max+1 once the newest rows are deleted); a store with
+concurrent writers whose ids can commit out of order (a Postgres sequence, say) does not satisfy it as is.
+
+`readAfter` returns fewer than `limit` entries only when none remain (the relay treats a short batch as drained), so a
+store must not cap its page below `limit`.
+
+- `createRelayedChangeBus({ store, origin, clock?, onError?, shouldAppend? })` returns `{ bus, publishLocal, settled }`.
+  `bus.publish` queues the append and then delivers to local subscribers (the same isolation as `createChangeBus`):
+  queued before delivery, so a listener that publishes in turn cannot reorder the log, and run after it. Appends run
+  one at a time in publish order and are never awaited by `publish`; `createdAt` is taken when the append runs and
+  only drives retention; a failed append goes to `onError`
+  and a throwing `onError` is dropped. `publishLocal` skips the append. `settled()` resolves when every requested
+  append has finished or failed.
+- `startChangeRelay({ store, publishLocal, origin, pollMs, retentionMs, pruneEveryMs, batchLimit, clock?, onError? })`
+  resolves to `{ stop }` (rejecting with a `RangeError` for a non-positive-integer `batchLimit`, a `pollMs` or `pruneEveryMs` that is not a positive integer within the timer range, or a negative, non-finite or too short `retentionMs`: it must be at least twice `pollMs`) once its cursor (`latestId()`) is set: nothing before it is replayed. Each tick reads the
+  change token when the store has one and reads records only when it changed (no token: every tick), excluding its own
+  origin. Decoded events go to `publishLocal` (so they are never re-appended), skipped records go to `onError`, and the
+  cursor passes both. A full batch leaves the token unrecorded so the next tick drains the rest. Ticks and prunes
+  never overlap themselves; a failing one is reported and the next still runs. `stop()` clears the timers and awaits
+  the work in flight. Timers are unref'd only where the runtime offers `unref`.
+- The decisions are pure and exported: `planRelayBatch`, `pruneCutoff`, `shouldRead`.
+
+Guarantees: delivery across processes is at-most-once and best-effort, like the local bus. A lost append or a pruned
+record costs one missed notification, and latency is about one `pollMs`; same-process delivery stays immediate. There
+is no echo (a process never relays its own origin, and relayed events are never re-appended) and no replay (the
+cursor starts at `latestId()`). The engine still sees only a `ChangeBus`.
+
+What the package provides (inside each process) and what the consumer provides (the store). Two processes share one
+store; each has its own local bus and subscribers.
+
+```mermaid
+flowchart LR
+  Q[("ChangeLogStore<br/>(consumer's)")]
+  subgraph A["Process A (writes)"]
+    EA["runEffects<br/>(engine)"] -->|"publish(event)<br/>after commit"| BA["relayed bus"]
+    BA -->|"1 · local, immediate"| SA["A's subscribers"]
+    BA -->|"2 · queued append<br/>(best-effort, in order)"| Q
+  end
+  subgraph B["Process B (serves subscribers)"]
+    RB["relay<br/>(every pollMs)"] -->|"changeToken · readAfter<br/>(not own origin)"| Q
+    RB -->|"publishLocal(event)<br/>(never appended again)"| LB["B's local bus"]
+    LB --> SB["B's subscribers"]
+  end
+```
+
+A write in A reaching a subscriber in B:
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant E as Engine (A)
+  participant Bus as Relayed bus (A)
+  participant SubA as Subscribers (A)
+  participant S as ChangeLogStore
+  participant R as Relay (B)
+  participant SubB as Subscribers (B)
+
+  E->>Bus: publish(event), after the commit
+  Bus->>SubA: deliver now (isolated)
+  Bus-)S: append {event, origin A, createdAt}<br/>queued, never awaited by publish
+  Note over Bus,S: queued before local delivery (a listener that publishes in turn cannot reorder the log), runs after it;<br/>createdAt is taken when the append runs and only drives retention<br/>a failed append → onError, publish has already returned
+  loop every pollMs
+    R->>S: changeToken()
+    alt token unchanged
+      Note over R: nothing to read
+    else token changed (or first tick)
+      R->>S: readAfter(cursor, not origin B, batchLimit)
+      S-->>R: records + skipped
+      R->>SubB: publishLocal(event) for each record
+      Note over R: skipped → onError · cursor moves past both
+    end
+  end
+```
+
+One relay tick, in detail:
+
+```mermaid
+flowchart TD
+  T(["tick (every pollMs)"]) --> Busy{"previous tick<br/>still running?"}
+  Busy -- yes --> Skip(["skip this tick"])
+  Busy -- no --> Tok{"store has<br/>changeToken?"}
+  Tok -- no --> Read
+  Tok -- yes --> Chg{"token changed<br/>since last read?"}
+  Chg -- no --> Done(["done"])
+  Chg -- yes --> Read["readAfter(cursor, excludeOrigin, batchLimit)"]
+  Read --> Plan["planRelayBatch: events · skipped · next cursor"]
+  Plan --> Pub["publishLocal each event<br/>report each skipped to onError"]
+  Pub --> Full{"batch full?"}
+  Full -- yes --> Keep["leave token unrecorded<br/>(next tick drains)"] --> Done
+  Full -- no --> Rec["record token"] --> Done
+  Read -.->|"throws"| Err["onError, next tick still runs"]
+```
+
+Pruning runs on its own timer, never overlapping itself: every `pruneEveryMs`, `pruneBefore(now − retentionMs)`.
+
+```ts
+const { bus, publishLocal } = createRelayedChangeBus<CommitEvent>({ store, origin, onError: reportFailure });
+const relay = await startChangeRelay({ store, publishLocal, origin, pollMs: 250, retentionMs, pruneEveryMs, batchLimit: 100 });
+```
+
 ## Public API stability
 
 Every export of `src/index.ts` — the data contract, the adapter port, and the entry points above — is the

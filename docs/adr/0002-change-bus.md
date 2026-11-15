@@ -19,7 +19,8 @@ succeeded, inviting callers to retry a write that was durable.
    (`zod`, `neverthrow`, `remeda` only).
 3. **The interface is the seam for multi-process transports.** `createChangeBus` is process-local. A deployment
    spanning processes implements `ChangeBus` over its own transport (a database `LISTEN`/`NOTIFY`, a broker) and
-   hands its `publish` to the engine; the engine does not change.
+   hands its `publish` to the engine; the engine does not change. ADR 0003 ships a store-backed implementation of
+   that seam.
 4. **Post-commit failure isolation.** The bus isolates each listener (a throwing listener is reported to
    `onError`, never stops the others, never escapes `publish`; async listeners and reporters have their rejections
    observed, not awaited, so none go unhandled) and snapshots listeners per publish. The engine
