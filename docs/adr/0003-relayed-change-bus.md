@@ -42,14 +42,21 @@ the in-process bus.
    };
    ```
 
-   `id` is increasing in write order. A record the store cannot decode is returned as `skipped` with its id and the
+   `id` strictly increases, is never reused (even after pruning removes the newest records), and records become
+   readable in increasing id order. The relay's cursor is the last id it saw, so a reused id, or a lower id that
+   commits after a higher one was read, is skipped for good. Two practical consequences: SQLite needs
+   `INTEGER PRIMARY KEY AUTOINCREMENT` (a plain rowid reuses max+1 once the newest rows are deleted), and a store
+   with concurrent writers whose ids can commit out of order (a Postgres sequence, say) does not satisfy the
+   contract as is. A record the store cannot decode is returned as `skipped` with its id and the
    reason, never thrown, so one bad record cannot block the ones after it. The store owns its connections and their
    lifetime; the package never opens or closes anything.
 
 2. **`createRelayedChangeBus<E>`** returns `{ bus, publishLocal, settled }`:
-   - `bus` is a `ChangeBus<E>`. `publish` delivers to local subscribers first, through the same isolated in-process
-     bus as `createChangeBus`, then queues an append. Appends run one at a time in `publish` order and are never
-     awaited by `publish`. A failed append goes to `onError`; a throwing `onError` is dropped. An optional
+   - `bus` is a `ChangeBus<E>`. `publish` queues the append and then delivers to local subscribers through the same
+     isolated in-process bus as `createChangeBus`. The append is queued before delivery, so a listener that publishes
+     in turn cannot reorder the log, and runs after it, so local subscribers are never delayed by the store. Appends
+     run one at a time in `publish` order and are never awaited by `publish`; `createdAt` is taken when the append
+     runs and only drives retention. A failed append goes to `onError`; a throwing `onError` is dropped. An optional
      `shouldAppend(event)` skips events not worth recording.
    - `publishLocal` publishes on the local bus only. It is what a relay uses, so a relayed event is never recorded
      again.
@@ -64,7 +71,7 @@ the in-process bus.
      publishes each decoded event with `publishLocal`, reports each skipped record to `onError`, and moves the cursor
      past both. A full batch leaves the token unrecorded, so the next tick drains the rest.
    - Ticks and prunes never overlap themselves. A failing one is reported and the next still runs.
-   - Every `pruneEveryMs` it deletes records older than `retentionMs`.
+   - Every `pruneEveryMs` it deletes records older than `retentionMs`, which must be at least twice `pollMs`.
    - `stop()` clears the timers and waits for the tick or prune in flight.
 
 4. **The decisions are pure and exported**: the next cursor and the split into events and skipped records for a
@@ -115,7 +122,7 @@ sequenceDiagram
   E->>Bus: publish(event), after the commit
   Bus->>SubA: deliver now (isolated)
   Bus-)S: append {event, origin A, createdAt}<br/>queued, never awaited by publish
-  Note over Bus,S: a failed append → onError, publish has already returned
+  Note over Bus,S: queued before local delivery (a listener that publishes in turn cannot reorder the log), runs after it;<br/>createdAt is taken when the append runs and only drives retention<br/>a failed append → onError, publish has already returned
   loop every pollMs
     R->>S: changeToken()
     alt token unchanged

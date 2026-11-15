@@ -1,4 +1,5 @@
 import { filter, firstBy, identity, map, pipe } from 'remeda';
+import { UNREAD_TOKEN } from './unreadToken.js';
 
 export type ChangeLogRecord<E> = { id: number; origin: string; event: E };
 
@@ -9,7 +10,11 @@ export type ChangeLogEntry<E> = ChangeLogRecord<E> | ChangeLogSkipped;
 
 export type NewChangeLogRecord<E> = { event: E; origin: string; createdAt: string };
 
-/** The consumer's storage for cross-process change notifications; `id` increases in write order. */
+/**
+ * The consumer's storage for cross-process change notifications. `id` strictly increases, is never reused (even
+ * after pruning removes the newest records), and records become readable in increasing id order: the relay's cursor
+ * would otherwise skip a record.
+ */
 export type ChangeLogStore<E> = {
   append: (record: NewChangeLogRecord<E>) => Promise<void>;
   latestId: () => Promise<number>;
@@ -26,9 +31,6 @@ export type RelayBatchPlan<E> = {
   skipped: readonly ChangeLogSkipped[];
   lastId: number;
 };
-
-/** The "no token recorded yet" marker: a distinct value so a store whose token is `undefined` still compares. */
-export const UNREAD_TOKEN: unique symbol = Symbol('unreadChangeToken');
 
 const isSkipped = <E>(entry: ChangeLogEntry<E>): entry is ChangeLogSkipped => 'skipped' in entry;
 

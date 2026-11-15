@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { planRelayBatch, pruneCutoff, shouldRead, UNREAD_TOKEN, type ChangeLogEntry } from '../src/changeLog.js';
+import { planRelayBatch, pruneCutoff, shouldRead, type ChangeLogEntry } from '../src/changeLog.js';
+import { UNREAD_TOKEN } from '../src/unreadToken.js';
 
 type Event = { name: string };
 

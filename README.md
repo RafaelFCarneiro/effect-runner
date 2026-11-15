@@ -115,22 +115,29 @@ Provide a `ChangeLogStore` (a table or equivalent) and make two calls. Each proc
 `publishLocal` is what the relay delivers on, so a relayed event is never recorded again.
 
 ```ts
-import { createRelayedChangeBus, startChangeRelay, type ChangeLogEntry, type ChangeLogStore } from '@rfc0/effect-runner';
+import { createRelayedChangeBus, startChangeRelay, type ChangeLogStore } from '@rfc0/effect-runner';
 
 type Event = { entities: readonly string[] };
 
-const rows: ChangeLogEntry<Event>[] = []; // a toy store; use a real table, ids increasing in write order
-const origins = new Map<number, string>();
+type Row = { id: number; origin: string; createdAt: string; event: Event };
+
+// A toy store; use a real table. Ids come from a counter, never rows.length + 1: after pruning removes the newest
+// rows an id would be reused, and a relay whose cursor is already past it would skip the new record.
+const rows: Row[] = [];
+const ids = { last: 0 };
 const store: ChangeLogStore<Event> = {
-  append: async ({ event, origin }) => {
-    const id = rows.length + 1;
-    origins.set(id, origin);
-    rows.push({ id, origin, event });
+  append: async ({ event, origin, createdAt }) => {
+    rows.push({ id: ++ids.last, origin, createdAt, event });
   },
-  latestId: async () => rows.length,
+  latestId: async () => ids.last,
   readAfter: async (afterId, excludeOrigin, limit) =>
-    rows.filter((row) => row.id > afterId && origins.get(row.id) !== excludeOrigin).slice(0, limit),
-  pruneBefore: async () => {},
+    rows
+      .filter((row) => row.id > afterId && row.origin !== excludeOrigin)
+      .slice(0, limit)
+      .map(({ id, origin, event }) => ({ id, origin, event })),
+  pruneBefore: async (isoInstant) => {
+    rows.splice(0, rows.length, ...rows.filter((row) => row.createdAt >= isoInstant));
+  },
 };
 
 const origin = crypto.randomUUID();

@@ -103,6 +103,21 @@ describe('startChangeRelay', () => {
     expect(store.calls.latestId).toBe(0);
   });
 
+  it('rejects a retention shorter than twice the poll interval before touching the store', async () => {
+    const store = createMemoryChangeLogStore<Event>();
+    const { relay } = start(store, { retentionMs: POLL_MS * 2 - 1 });
+
+    await expect(relay).rejects.toThrow(RangeError);
+    await expect(relay).rejects.toThrow('retentionMs must be at least 2 times pollMs');
+    expect(store.calls.latestId).toBe(0);
+  });
+
+  it('accepts a retention of exactly twice the poll interval', async () => {
+    const { relay } = start(createMemoryChangeLogStore<Event>(), { retentionMs: POLL_MS * 2 });
+
+    await (await relay).stop();
+  });
+
   it('does not replay records written before it started', async () => {
     const store = createMemoryChangeLogStore<Event>();
     store.write(OTHER, { name: 'old' });

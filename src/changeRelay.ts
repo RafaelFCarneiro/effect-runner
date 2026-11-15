@@ -3,11 +3,11 @@ import {
   planRelayBatch,
   pruneCutoff,
   shouldRead,
-  UNREAD_TOKEN,
   type ChangeLogSkipped,
   type ChangeLogStore,
 } from './changeLog.js';
 import { runIsolated } from './isolate.js';
+import { UNREAD_TOKEN } from './unreadToken.js';
 
 export type ChangeRelayOptions<E> = {
   store: ChangeLogStore<E>;
@@ -38,12 +38,20 @@ const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
 // Keeps `now - retention` a valid Date, so a prune can always build its cutoff.
 const MAX_RETENTION_MS = 4e15;
 
-const RelayTimings = z.object({
-  pollMs: z.number().int().positive().max(MAX_TIMER_DELAY_MS),
-  pruneEveryMs: z.number().int().positive().max(MAX_TIMER_DELAY_MS),
-  retentionMs: z.number().nonnegative().max(MAX_RETENTION_MS),
-  batchLimit: z.number().int().positive(),
-});
+// A record must outlive a few polls, or a slow tick could miss it before it is read.
+const MIN_RETENTION_IN_POLLS = 2;
+
+const RelayTimings = z
+  .object({
+    pollMs: z.number().int().positive().max(MAX_TIMER_DELAY_MS),
+    pruneEveryMs: z.number().int().positive().max(MAX_TIMER_DELAY_MS),
+    retentionMs: z.number().nonnegative().max(MAX_RETENTION_MS),
+    batchLimit: z.number().int().positive(),
+  })
+  .refine(({ pollMs, retentionMs }) => retentionMs >= MIN_RETENTION_IN_POLLS * pollMs, {
+    path: ['retentionMs'],
+    message: `must be at least ${MIN_RETENTION_IN_POLLS} times pollMs`,
+  });
 
 const describeInvalid = ({ issues }: z.ZodError): string =>
   `invalid change relay options: ${issues.map(({ path, message }) => `${path.join('.')} ${message}`).join('; ')}`;

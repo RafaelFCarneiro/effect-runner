@@ -171,13 +171,20 @@ mechanics and the consumer supplies a `ChangeLogStore<E>` (see [ADR 0003](adr/00
 `{ id, skipped }`, never thrown), `pruneBefore`, and an optional `changeToken` (any value that changes when another
 process may have written).
 
+The id contract: `id` strictly increases, is never reused (even after pruning removes the newest records), and
+records become readable in increasing id order, because the relay's cursor is the last id it saw. SQLite needs
+`INTEGER PRIMARY KEY AUTOINCREMENT` (a plain rowid reuses max+1 once the newest rows are deleted); a store with
+concurrent writers whose ids can commit out of order (a Postgres sequence, say) does not satisfy it as is.
+
 - `createRelayedChangeBus({ store, origin, clock?, onError?, shouldAppend? })` returns `{ bus, publishLocal, settled }`.
-  `bus.publish` delivers to local subscribers first (the same isolation as `createChangeBus`), then queues an append.
-  Appends run one at a time in publish order and are never awaited by `publish`; a failed append goes to `onError`
+  `bus.publish` queues the append and then delivers to local subscribers (the same isolation as `createChangeBus`):
+  queued before delivery, so a listener that publishes in turn cannot reorder the log, and run after it. Appends run
+  one at a time in publish order and are never awaited by `publish`; `createdAt` is taken when the append runs and
+  only drives retention; a failed append goes to `onError`
   and a throwing `onError` is dropped. `publishLocal` skips the append. `settled()` resolves when every requested
   append has finished or failed.
 - `startChangeRelay({ store, publishLocal, origin, pollMs, retentionMs, pruneEveryMs, batchLimit, clock?, onError? })`
-  resolves to `{ stop }` (rejecting with a `RangeError` for a non-positive-integer `batchLimit`, a `pollMs` or `pruneEveryMs` that is not a positive integer within the timer range, or a negative or non-finite `retentionMs`) once its cursor (`latestId()`) is set: nothing before it is replayed. Each tick reads the
+  resolves to `{ stop }` (rejecting with a `RangeError` for a non-positive-integer `batchLimit`, a `pollMs` or `pruneEveryMs` that is not a positive integer within the timer range, or a negative, non-finite or too short `retentionMs`: it must be at least twice `pollMs`) once its cursor (`latestId()`) is set: nothing before it is replayed. Each tick reads the
   change token when the store has one and reads records only when it changed (no token: every tick), excluding its own
   origin. Decoded events go to `publishLocal` (so they are never re-appended), skipped records go to `onError`, and the
   cursor passes both. A full batch leaves the token unrecorded so the next tick drains the rest. Ticks and prunes
@@ -223,7 +230,7 @@ sequenceDiagram
   E->>Bus: publish(event), after the commit
   Bus->>SubA: deliver now (isolated)
   Bus-)S: append {event, origin A, createdAt}<br/>queued, never awaited by publish
-  Note over Bus,S: a failed append → onError, publish has already returned
+  Note over Bus,S: queued before local delivery (a listener that publishes in turn cannot reorder the log), runs after it;<br/>createdAt is taken when the append runs and only drives retention<br/>a failed append → onError, publish has already returned
   loop every pollMs
     R->>S: changeToken()
     alt token unchanged
