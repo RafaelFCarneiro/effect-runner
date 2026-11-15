@@ -93,8 +93,8 @@ const unsubscribe = bus.subscribe((entities) => refresh(entities)); // e.g. ['th
 await runEffects({ ...ctx, onPublishError: logPublishFailure }, registry, flow, bus.publish);
 ```
 
-`createChangeBus` is an in-memory transport; implement the `ChangeBus` interface yourself for multi-process
-delivery. A failing notification never fails a committed write.
+`createChangeBus` is an in-memory transport; for several processes see [Across processes](#across-processes) or
+implement the `ChangeBus` interface over your own transport. A failing notification never fails a committed write.
 
 The bus is generic over its event (`createChangeBus<E>()`, default `readonly string[]`). `runEffects` always
 publishes entity tags, so adapt them to your richer event once, at the composition root:
@@ -109,6 +109,47 @@ const publish: PublishChange = (entities) => bus.publish({ entities, at: new Dat
 await runEffects(ctx, registry, flow, publish);
 ```
 
+#### Across processes
+
+Provide a `ChangeLogStore` (a table or equivalent) and make two calls. Each process writes its own `origin`;
+`publishLocal` is what the relay delivers on, so a relayed event is never recorded again.
+
+```ts
+import { createRelayedChangeBus, startChangeRelay, type ChangeLogEntry, type ChangeLogStore } from '@rfc0/effect-runner';
+
+type Event = { entities: readonly string[] };
+
+const rows: ChangeLogEntry<Event>[] = []; // a toy store; use a real table, ids increasing in write order
+const origins = new Map<number, string>();
+const store: ChangeLogStore<Event> = {
+  append: async ({ event, origin }) => {
+    const id = rows.length + 1;
+    origins.set(id, origin);
+    rows.push({ id, origin, event });
+  },
+  latestId: async () => rows.length,
+  readAfter: async (afterId, excludeOrigin, limit) =>
+    rows.filter((row) => row.id > afterId && origins.get(row.id) !== excludeOrigin).slice(0, limit),
+  pruneBefore: async () => {},
+};
+
+const origin = crypto.randomUUID();
+const { bus, publishLocal, settled } = createRelayedChangeBus<Event>({ store, origin, onError: logFailure });
+const relay = await startChangeRelay({
+  store, publishLocal, origin, pollMs: 250, retentionMs: 3_600_000, pruneEveryMs: 60_000, batchLimit: 100,
+  onError: logFailure,
+});
+
+bus.subscribe(({ entities }) => refresh(entities));
+const publish: PublishChange = (entities) => bus.publish({ entities });
+await runEffects(ctx, registry, flow, publish);
+
+await relay.stop();
+await settled();
+```
+
+Delivery across processes is at-most-once and best-effort; see [ADR 0003](docs/adr/0003-relayed-change-bus.md).
+
 `runEffectsSequence` runs a sequence of independent units (each its own transaction + retry), for batch imports.
 
 ## Documentation
@@ -118,6 +159,7 @@ await runEffects(ctx, registry, flow, publish);
 - [Contributing](CONTRIBUTING.md) — conventions and the pre-PR gate
 - [ADR 0001](docs/adr/0001-extracted-from-an-application.md) — why it exists and what counts as the public API
 - [ADR 0002](docs/adr/0002-change-bus.md) — the change bus and post-commit failure isolation
+- [ADR 0003](docs/adr/0003-relayed-change-bus.md) — the store-backed change bus across processes
 
 ## Why
 

@@ -163,6 +163,36 @@ const publish: PublishChange = (entities) => bus.publish({ entities, at: new Dat
 await runEffects({ ...ctx, onPublishError: reportPublishFailure }, registry, flow, publish);
 ```
 
+## Across processes
+
+`createChangeBus` is process-local. For writers in several processes over one store, the package supplies the
+mechanics and the consumer supplies a `ChangeLogStore<E>` (see [ADR 0003](adr/0003-relayed-change-bus.md)): `append`,
+`latestId`, `readAfter` (entries past a cursor, excluding an origin, in id order; an undecodable record is returned as
+`{ id, skipped }`, never thrown), `pruneBefore`, and an optional `changeToken` (any value that changes when another
+process may have written).
+
+- `createRelayedChangeBus({ store, origin, clock?, onError?, shouldAppend? })` returns `{ bus, publishLocal, settled }`.
+  `bus.publish` delivers to local subscribers first (the same isolation as `createChangeBus`), then queues an append.
+  Appends run one at a time in publish order and are never awaited by `publish`; a failed append goes to `onError`
+  and a throwing `onError` is dropped. `publishLocal` skips the append. `settled()` resolves when every requested
+  append has finished or failed.
+- `startChangeRelay({ store, publishLocal, origin, pollMs, retentionMs, pruneEveryMs, batchLimit, clock?, onError? })`
+  resolves to `{ stop }` once its cursor (`latestId()`) is set: nothing before it is replayed. Each tick reads the
+  change token when the store has one and reads records only when it changed (no token: every tick), excluding its own
+  origin. Decoded events go to `publishLocal` (so they are never re-appended), skipped records go to `onError`, and the
+  cursor passes both. A full batch leaves the token unrecorded so the next tick drains the rest. Ticks and prunes
+  never overlap themselves; a failing one is reported and the next still runs. `stop()` clears the timers and awaits
+  the work in flight. Timers are unref'd only where the runtime offers `unref`.
+- The decisions are pure and exported: `planRelayBatch`, `pruneCutoff`, `shouldRead`.
+
+Delivery across processes is at-most-once and best-effort, like the local bus: a lost append or a pruned record costs
+one missed notification, and latency is about one `pollMs`. The engine still sees only a `ChangeBus`.
+
+```ts
+const { bus, publishLocal } = createRelayedChangeBus<CommitEvent>({ store, origin, onError: reportFailure });
+const relay = await startChangeRelay({ store, publishLocal, origin, pollMs: 250, retentionMs, pruneEveryMs, batchLimit: 100 });
+```
+
 ## Public API stability
 
 Every export of `src/index.ts` — the data contract, the adapter port, and the entry points above — is the
