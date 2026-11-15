@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import {
   planRelayBatch,
   pruneCutoff,
@@ -32,7 +33,7 @@ type Cursor = { lastId: number; token: unknown };
 const describeSkipped = ({ id, skipped }: ChangeLogSkipped): Error =>
   new Error(`change log record ${id} skipped: ${skipped}`);
 
-const isPositiveInteger = (value: number): boolean => Number.isSafeInteger(value) && value > 0;
+const BatchLimit = z.number().int().positive();
 
 // Timers are unref'd only where the runtime has `unref`, so the package needs no Node-only import.
 const unrefIfSupported = (timer: unknown): void => {
@@ -69,7 +70,8 @@ export const startChangeRelay = async <E>({
   onError,
 }: ChangeRelayOptions<E>): Promise<ChangeRelay> => {
   // A zero or fractional limit would stall delivery or mistake a full batch for a drained backlog.
-  if (!isPositiveInteger(batchLimit)) throw new RangeError(`batchLimit must be a positive integer, got ${batchLimit}`);
+  const limit = BatchLimit.safeParse(batchLimit);
+  if (!limit.success) throw new RangeError(`batchLimit must be a positive integer, got ${batchLimit}`);
   const report = (cause: unknown): void => runIsolated(() => onError?.(cause));
   const cursor: Cursor = { lastId: await store.latestId(), token: UNREAD_TOKEN };
 
