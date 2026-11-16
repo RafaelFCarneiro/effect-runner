@@ -4,9 +4,16 @@ const PERSIST_OPS = ['insert', 'update', 'delete', 'check'] as const;
 export type PersistOp = (typeof PERSIST_OPS)[number];
 
 // Declared types name no zod 3-vs-4 internals (an inferred `ZodEnum<...>` differs between majors),
-// so the shipped .d.ts type-checks under either peer.
+// so the shipped .d.ts type-checks under either peer. The enum surface is kept: `enum`, `options`, `extract`, `exclude`.
+type PersistOpSchema = z.ZodType<PersistOp> & {
+  readonly enum: { readonly [K in PersistOp]: K };
+  readonly options: typeof PERSIST_OPS;
+  extract: <const U extends readonly [PersistOp, ...PersistOp[]]>(values: U) => z.ZodType<U[number]>;
+  exclude: <const U extends readonly [PersistOp, ...PersistOp[]]>(values: U) => z.ZodType<Exclude<PersistOp, U[number]>>;
+};
+
 /** Effect intent (`check` is a read-set guard, not a write); construct via `.enum.*`, never a bare string. */
-export const PersistOp: z.ZodType<PersistOp> & { readonly enum: { readonly [K in PersistOp]: K } } = z.enum(PERSIST_OPS);
+export const PersistOp = z.enum(PERSIST_OPS) as unknown as PersistOpSchema;
 
 /** Where every new row starts. Supplied by the adapter when shaping the insert row, not by the core. */
 export const INITIAL_VERSION = 0;

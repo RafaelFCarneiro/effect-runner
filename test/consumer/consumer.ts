@@ -5,3 +5,7 @@ import { PersistOp, withPersistenceMeta, type Persistable } from '../../dist/ind
 const Tag = withPersistenceMeta(z.object({ id: z.string() }));
 export const parsed: { id: string; version: number } = Tag.parse({ id: 'a', version: 0 });
 export const op: Persistable = { op: PersistOp.enum.check, entity: 'tag', id: 'a', version: 0 };
+
+export const allOps: readonly string[] = PersistOp.options;
+export const writes = PersistOp.exclude(['check']).parse('insert');
+export const reads = PersistOp.extract(['check']).parse('check');
