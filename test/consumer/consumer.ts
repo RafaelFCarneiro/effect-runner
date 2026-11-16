@@ -9,3 +9,5 @@ export const op: Persistable = { op: PersistOp.enum.check, entity: 'tag', id: 'a
 export const allOps: readonly string[] = PersistOp.options;
 export const writes = PersistOp.exclude(['check']).parse('insert');
 export const reads = PersistOp.extract(['check']).parse('check');
+export const chained = PersistOp.exclude(['check']).enum.insert;
+export const derived = PersistOp.extract(['insert', 'update']).exclude(['update']).parse('insert');

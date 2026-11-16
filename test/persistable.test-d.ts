@@ -22,3 +22,10 @@ describe('PersistOp types', () => {
     expectTypeOf(PersistOp.extract(['check']).parse('check')).toEqualTypeOf<'check'>();
   });
 });
+
+describe('derived PersistOp enums', () => {
+  it('keep the enum surface when chained', () => {
+    expectTypeOf(PersistOp.exclude(['check']).enum.insert).toEqualTypeOf<'insert'>();
+    expectTypeOf(PersistOp.extract(['insert', 'update']).exclude(['update']).parse('insert')).toEqualTypeOf<'insert'>();
+  });
+});
