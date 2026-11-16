@@ -15,7 +15,8 @@ design. The source of truth is [`src/persistable.ts`](../src/persistable.ts) (da
 
 The engine is generic over an opaque transaction handle `TTx` and the consumer's error type `E`. It imports only
 `zod`, `neverthrow` and `remeda`, and never a database driver (lint-enforced; see
-[ADR 0001](adr/0001-extracted-from-an-application.md)).
+[ADR 0001](adr/0001-extracted-from-an-application.md)). `zod` is a peer on either major (3.25+ or 4.6.6+), so `src/` uses only
+API common to both, and CI runs typecheck and tests against each.
 
 ## The data contract
 
