@@ -1,20 +1,26 @@
 import { z } from 'zod';
 
+const PERSIST_OPS = ['insert', 'update', 'delete', 'check'] as const;
+export type PersistOp = (typeof PERSIST_OPS)[number];
+
+// Declared types name no zod 3-vs-4 internals (an inferred `ZodEnum<...>` differs between majors),
+// so the shipped .d.ts type-checks under either peer.
 /** Effect intent (`check` is a read-set guard, not a write); construct via `.enum.*`, never a bare string. */
-export const PersistOp = z.enum(['insert', 'update', 'delete', 'check']);
-export type PersistOp = z.infer<typeof PersistOp>;
+export const PersistOp: z.ZodType<PersistOp> & { readonly enum: { readonly [K in PersistOp]: K } } = z.enum(PERSIST_OPS);
 
 /** Where every new row starts. Supplied by the adapter when shaping the insert row, not by the core. */
 export const INITIAL_VERSION = 0;
 
 /** The optimistic-concurrency token, declared once and applied via `withPersistenceMeta`, never baked into the model. */
-export const PersistenceMeta = z.object({
+export const PersistenceMeta: z.ZodObject<{ version: z.ZodNumber }> = z.object({
   version: z.number().int().nonnegative().describe('Optimistic-concurrency token; internal, never on wire/out'),
 });
 
 /** Pure model schema → entity schema with the `version` field. */
-export const withPersistenceMeta = <T extends z.ZodRawShape>(model: z.ZodObject<T>) =>
-  model.extend(PersistenceMeta.shape);
+export const withPersistenceMeta = <T extends z.ZodRawShape>(
+  model: z.ZodObject<T>,
+): z.ZodObject<Omit<T, 'version'> & { version: z.ZodNumber }> =>
+  model.extend(PersistenceMeta.shape) as unknown as z.ZodObject<Omit<T, 'version'> & { version: z.ZodNumber }>;
 
 /**
  * A write intent handed from the core to the shell. Generic over the consumer's entity tag and model.

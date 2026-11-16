@@ -45,7 +45,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src test",
     "test": "vitest run",
-    "prepublishOnly": "npm run lint && npm run typecheck && npm run test && npm run build"
+    "prepublishOnly": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "check:consumer": "tsc -p test/consumer/tsconfig.json"
   },
   "publishConfig": {
     "access": "public"
