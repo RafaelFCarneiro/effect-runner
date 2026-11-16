@@ -11,3 +11,5 @@ export const writes = PersistOp.exclude(['check']).parse('insert');
 export const reads = PersistOp.extract(['check']).parse('check');
 export const chained = PersistOp.exclude(['check']).enum.insert;
 export const derived = PersistOp.extract(['insert', 'update']).exclude(['update']).parse('insert');
+export const rebuilt = z.enum(PersistOp.options).parse('update');
+export const rebuiltFromDerived = z.enum(PersistOp.exclude(['check']).options).parse('insert');

@@ -29,3 +29,10 @@ describe('derived PersistOp enums', () => {
     expectTypeOf(PersistOp.extract(['insert', 'update']).exclude(['update']).parse('insert')).toEqualTypeOf<'insert'>();
   });
 });
+
+describe('PersistOp options', () => {
+  it('stay a literal tuple that z.enum accepts', () => {
+    expectTypeOf(z.enum(PersistOp.options).parse('update')).toEqualTypeOf<'insert' | 'update' | 'delete' | 'check'>();
+    expectTypeOf(PersistOp.exclude(['check']).options).toEqualTypeOf<['insert', 'update', 'delete']>();
+  });
+});

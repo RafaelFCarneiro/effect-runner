@@ -5,15 +5,22 @@ export type PersistOp = (typeof PERSIST_OPS)[number];
 
 // Declared types name no zod 3-vs-4 internals (an inferred `ZodEnum<...>` differs between majors),
 // so the shipped .d.ts type-checks under either peer. The enum surface is kept: `enum`, `options`, `extract`, `exclude`.
-type EnumSchema<V extends string> = z.ZodType<V> & {
+type Without<T extends readonly string[], X extends string> = T extends readonly [infer H extends string, ...infer R extends string[]]
+  ? H extends X
+    ? Without<R, X>
+    : [H, ...Without<R, X>]
+  : [];
+
+// `Options` stays a literal tuple, as zod 3 types it, so `z.enum(schema.options)` keeps compiling.
+type EnumSchema<V extends string, Options extends readonly string[]> = z.ZodType<V> & {
   readonly enum: { readonly [K in V]: K };
-  readonly options: readonly V[];
-  extract: <const U extends readonly [V, ...V[]]>(values: U) => EnumSchema<U[number]>;
-  exclude: <const U extends readonly [V, ...V[]]>(values: U) => EnumSchema<Exclude<V, U[number]>>;
+  readonly options: Options;
+  extract: <const U extends readonly [V, ...V[]]>(values: U) => EnumSchema<U[number], U>;
+  exclude: <const U extends readonly [V, ...V[]]>(values: U) => EnumSchema<Exclude<V, U[number]>, Without<Options, U[number]>>;
 };
 
 /** Effect intent (`check` is a read-set guard, not a write); construct via `.enum.*`, never a bare string. */
-export const PersistOp = z.enum(PERSIST_OPS) as unknown as EnumSchema<PersistOp>;
+export const PersistOp = z.enum(PERSIST_OPS) as unknown as EnumSchema<PersistOp, typeof PERSIST_OPS>;
 
 /** Where every new row starts. Supplied by the adapter when shaping the insert row, not by the core. */
 export const INITIAL_VERSION = 0;
