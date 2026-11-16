@@ -11,7 +11,7 @@ database itself: you plug in a tiny **adapter port** for your store (libSQL/SQLi
 Pairs naturally with [neverthrow](https://github.com/supermacro/neverthrow) (Result) and
 [zod](https://github.com/colinhacks/zod) (the version-token schema helper); `zod` is a peer dependency.
 
-**Requirements:** Node 20+, `zod` 3.25+ or 4.6.6+ (both are tested in CI), and TypeScript 5.8+ for the types.
+**Requirements:** Node 20+, `zod` 4.6.6+, and TypeScript 5.8+ for the types.
 
 ## Install
 

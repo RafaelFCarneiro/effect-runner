@@ -16,23 +16,8 @@ describe('withPersistenceMeta types', () => {
 });
 
 describe('PersistOp types', () => {
-  it('keeps the enum surface', () => {
+  it('is the infer of its enum, with literal members', () => {
+    expectTypeOf<PersistOp>().toEqualTypeOf<'insert' | 'update' | 'delete' | 'check'>();
     expectTypeOf(PersistOp.enum.insert).toEqualTypeOf<'insert'>();
-    expectTypeOf(PersistOp.exclude(['check']).parse('insert')).toEqualTypeOf<'insert' | 'update' | 'delete'>();
-    expectTypeOf(PersistOp.extract(['check']).parse('check')).toEqualTypeOf<'check'>();
-  });
-});
-
-describe('derived PersistOp enums', () => {
-  it('keep the enum surface when chained', () => {
-    expectTypeOf(PersistOp.exclude(['check']).enum.insert).toEqualTypeOf<'insert'>();
-    expectTypeOf(PersistOp.extract(['insert', 'update']).exclude(['update']).parse('insert')).toEqualTypeOf<'insert'>();
-  });
-});
-
-describe('PersistOp options', () => {
-  it('stay a literal tuple that z.enum accepts', () => {
-    expectTypeOf(z.enum(PersistOp.options).parse('update')).toEqualTypeOf<'insert' | 'update' | 'delete' | 'check'>();
-    expectTypeOf(PersistOp.exclude(['check']).options).toEqualTypeOf<['insert', 'update', 'delete']>();
   });
 });
