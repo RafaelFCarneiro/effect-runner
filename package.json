@@ -45,13 +45,14 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src test",
     "test": "vitest run",
-    "prepublishOnly": "npm run lint && npm run typecheck && npm run test && npm run build"
+    "prepublishOnly": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "check:consumer": "tsc -p test/consumer/tsconfig.json"
   },
   "publishConfig": {
     "access": "public"
   },
   "peerDependencies": {
-    "zod": "^3.25.0"
+    "zod": "^4.6.6"
   },
   "dependencies": {
     "neverthrow": "^8.2.0",
@@ -63,6 +64,6 @@
     "typescript": "^5.8.0",
     "typescript-eslint": "^8.20.0",
     "vitest": "^4.1.8",
-    "zod": "^3.25.0"
+    "zod": "^4.6.6"
   }
 }

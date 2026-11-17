@@ -54,7 +54,7 @@ const RelayTimings = z
   });
 
 const describeInvalid = ({ issues }: z.ZodError): string =>
-  `invalid change relay options: ${issues.map(({ path, message }) => `${path.join('.')} ${message}`).join('; ')}`;
+  `invalid change relay options: ${issues.map(({ path, message }) => `${path.map(String).join('.')} ${message}`).join('; ')}`;
 
 // Timers are unref'd only where the runtime has `unref`, so the package needs no Node-only import.
 const unrefIfSupported = (timer: unknown): void => {

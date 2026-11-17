@@ -1,0 +1,23 @@
+import { describe, expectTypeOf, it } from 'vitest';
+import { z } from 'zod';
+import { PersistOp, withPersistenceMeta } from '../src/persistable.js';
+
+const tag = z.object({ id: z.string(), name: z.string() });
+
+describe('withPersistenceMeta types', () => {
+  it('adds a numeric version to the model shape', () => {
+    expectTypeOf(withPersistenceMeta(tag).shape.version).toEqualTypeOf<z.ZodNumber>();
+    expectTypeOf(withPersistenceMeta(tag).shape.id).toEqualTypeOf<z.ZodString>();
+  });
+
+  it('accepts any object schema', () => {
+    expectTypeOf(withPersistenceMeta).parameter(0).toExtend<z.ZodObject<z.ZodRawShape>>();
+  });
+});
+
+describe('PersistOp types', () => {
+  it('is the infer of its enum, with literal members', () => {
+    expectTypeOf<PersistOp>().toEqualTypeOf<'insert' | 'update' | 'delete' | 'check'>();
+    expectTypeOf(PersistOp.enum.insert).toEqualTypeOf<'insert'>();
+  });
+});
