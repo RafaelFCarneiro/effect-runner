@@ -68,6 +68,8 @@ contention), otherwise two transactions can still check each other's rows and bo
   `raiseConflictWhen(isConflict)(applier)` does that for you — it wraps `insert`, `update` and `delete` so a matching driver error becomes a `VersionConflict` (the original is kept as `cause`). Only `check` passes through, because it writes nothing:
 
   ```ts
+  import * as R from 'remeda';
+
   const isUniqueViolation = (cause: unknown): boolean => cause instanceof DriverError && cause.code === 'UNIQUE';
   const isForeignKeyViolation = (cause: unknown): boolean => cause instanceof DriverError && cause.code === 'FOREIGN_KEY';
   const asConflict = raiseConflictWhen(R.anyPass([isUniqueViolation, isForeignKeyViolation]));

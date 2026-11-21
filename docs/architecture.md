@@ -94,8 +94,7 @@ same retry for its own non-version conflict (e.g. a unique/FK race). `raiseConfl
 generic decorator for that: it wraps an applier's `insert` (forwarding `idempotencyKey`), `update` and `delete` so a
 failure the adapter's `IsConflict` predicate matches becomes a `VersionConflict` (the driver error kept as its `cause`),
 and rethrows anything else untouched. A unique race hits inserts and updates, an FK race mostly deletes. Only `check`
-passes through, because it writes nothing. The factory is curried on purpose, built once and applied to many appliers,
-so it is not a `purry` pipe helper.
+passes through, because it writes nothing.
 
 **Idempotency.** An `insert` may carry `idempotencyKey`. The applier writes it to a fixed key column and, on a
 duplicate key, skips the write and returns `applied: false` with `read` reflecting the existing row. Inserts are

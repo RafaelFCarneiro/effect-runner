@@ -64,7 +64,6 @@ const rethrowAsConflict = async <T>(isConflict: IsConflict, work: () => Promise<
   }
 };
 
-// Keeps `check` absent when the applier has none, and calls it on the applier so class instances keep their receiver.
 const forwardCheck = <TTx>(applier: EntityApplier<TTx>): EntityApplier<TTx>['check'] => {
   const { check } = applier;
   return check && ((tx, id, version) => check.call(applier, tx, id, version));
@@ -73,12 +72,12 @@ const forwardCheck = <TTx>(applier: EntityApplier<TTx>): EntityApplier<TTx>['che
 /**
  * Wraps an applier's `insert`, `update` and `delete` so a failure `isConflict` matches raises `VersionConflict`
  * (keeping the original as `cause`); any other failure rethrows untouched. `check` only reads, so it passes through.
- * Curried on purpose: a decorator factory built once (`raiseConflictWhen(isX)`) and applied to many appliers, not a pipe helper.
  */
+// Curried rather than purried: a factory built once and applied to many appliers, never used in a pipe.
 export const raiseConflictWhen =
   (isConflict: IsConflict) =>
   <TTx>(applier: EntityApplier<TTx>): EntityApplier<TTx> => ({
-    // Explicit forwarding (no spread) keeps class-based appliers working: a spread drops prototype methods.
+    // Forwarded member by member: a spread would drop a class-based applier's prototype methods.
     insert: (tx, model, idempotencyKey) =>
       rethrowAsConflict(isConflict, () => applier.insert(tx, model, idempotencyKey)),
     update: (tx, model) => rethrowAsConflict(isConflict, () => applier.update(tx, model)),

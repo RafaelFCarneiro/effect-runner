@@ -57,6 +57,7 @@ describe('raiseConflictWhen', () => {
   it.each(writes)('%s keeps the original error as the conflict cause', async (_name, write) => {
     const cause = new RaceError();
     const raised = await write(raiseConflictWhen(isRace)(makeApplier(cause))).catch((error: unknown) => error);
+    expect(raised).toBeInstanceOf(VersionConflict);
     expect((raised as VersionConflict).cause).toBe(cause);
   });
 
