@@ -90,7 +90,10 @@ reports `applied: false`, and the engine raises `VersionConflict`, which rolls b
 anything else propagates as a genuine error. A retryable failure rolls back the whole batch and **re-invokes the
 flow** — fresh reads, fresh decision — up to `MAX_RUN_EFFECTS_ATTEMPTS` (3) attempts in total. Exhaustion
 surfaces `ctx.conflictError()` on the error track. `VersionConflict` is exported so an applier can raise the
-same retry for its own non-version conflict (e.g. a unique/FK race).
+same retry for its own non-version conflict (e.g. a unique/FK race). `raiseConflictWhen(isConflict)` is the
+generic decorator for that: it wraps an applier's `insert` (forwarding `idempotencyKey`) and `update` so a failure the
+adapter's `IsConflict` predicate matches becomes a `VersionConflict`, and rethrows anything else untouched. `delete`
+and `check` pass through, since they create no keys.
 
 **Idempotency.** An `insert` may carry `idempotencyKey`. The applier writes it to a fixed key column and, on a
 duplicate key, skips the write and returns `applied: false` with `read` reflecting the existing row. Inserts are

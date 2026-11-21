@@ -53,6 +53,27 @@ export type ReadBack<TTx> = (tx: TTx, id: string) => Promise<unknown>;
 /** Rolls back the batch and re-runs the flow. Exported so an applier can raise it for its own conflicts. */
 export class VersionConflict extends Error {}
 
+/** Classifies a failure as another writer winning (a unique or FK race), so the flow re-runs and gives its ordinary answer. */
+export type IsConflict = (cause: unknown) => boolean;
+
+const rethrowAsConflict = async <T>(isConflict: IsConflict, work: () => Promise<T>): Promise<T> => {
+  try {
+    return await work();
+  } catch (cause) {
+    throw isConflict(cause) ? new VersionConflict() : cause;
+  }
+};
+
+/** Wraps an applier's `insert` and `update` so a failure `isConflict` matches raises `VersionConflict`; any other failure rethrows untouched. */
+export const raiseConflictWhen =
+  (isConflict: IsConflict) =>
+  <TTx>(applier: EntityApplier<TTx>): EntityApplier<TTx> => ({
+    ...applier,
+    insert: (tx, model, idempotencyKey) =>
+      rethrowAsConflict(isConflict, () => applier.insert(tx, model, idempotencyKey)),
+    update: (tx, model) => rethrowAsConflict(isConflict, () => applier.update(tx, model)),
+  });
+
 const resolveApplier = <TTx>(registry: ApplierRegistry<TTx>, entity: string): EntityApplier<TTx> => {
   const applier = registry[entity];
   if (!applier) throw new Error(`runEffects: no applier registered for entity "${entity}"`);
