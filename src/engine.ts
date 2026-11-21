@@ -60,20 +60,30 @@ const rethrowAsConflict = async <T>(isConflict: IsConflict, work: () => Promise<
   try {
     return await work();
   } catch (cause) {
-    throw isConflict(cause) ? new VersionConflict() : cause;
+    throw isConflict(cause) ? new VersionConflict(undefined, { cause }) : cause;
   }
 };
 
-/** Wraps an applier's `insert` and `update` so a failure `isConflict` matches raises `VersionConflict`; any other failure rethrows untouched. */
+// Keeps `check` absent when the applier has none, and calls it on the applier so class instances keep their receiver.
+const forwardCheck = <TTx>(applier: EntityApplier<TTx>): EntityApplier<TTx>['check'] => {
+  const { check } = applier;
+  return check && ((tx, id, version) => check.call(applier, tx, id, version));
+};
+
+/**
+ * Wraps an applier's `insert`, `update` and `delete` so a failure `isConflict` matches raises `VersionConflict`
+ * (keeping the original as `cause`); any other failure rethrows untouched. `check` only reads, so it passes through.
+ * Curried on purpose: a decorator factory built once (`raiseConflictWhen(isX)`) and applied to many appliers, not a pipe helper.
+ */
 export const raiseConflictWhen =
   (isConflict: IsConflict) =>
   <TTx>(applier: EntityApplier<TTx>): EntityApplier<TTx> => ({
+    // Explicit forwarding (no spread) keeps class-based appliers working: a spread drops prototype methods.
     insert: (tx, model, idempotencyKey) =>
       rethrowAsConflict(isConflict, () => applier.insert(tx, model, idempotencyKey)),
     update: (tx, model) => rethrowAsConflict(isConflict, () => applier.update(tx, model)),
-    // Explicit forwarding keeps class-based appliers working: a spread would drop prototype methods.
-    delete: (tx, id, version) => applier.delete(tx, id, version),
-    check: applier.check?.bind(applier),
+    delete: (tx, id, version) => rethrowAsConflict(isConflict, () => applier.delete(tx, id, version)),
+    check: forwardCheck(applier),
   });
 
 const resolveApplier = <TTx>(registry: ApplierRegistry<TTx>, entity: string): EntityApplier<TTx> => {

@@ -29,6 +29,7 @@ describe('raiseConflictWhen', () => {
   const writes = [
     ['insert', (a: EntityApplier<typeof tx>) => a.insert(tx, {})],
     ['update', (a: EntityApplier<typeof tx>) => a.update(tx, {})],
+    ['delete', (a: EntityApplier<typeof tx>) => a.delete(tx, 'a', 1)],
   ] as const;
 
   it.each(writes)('%s raises VersionConflict for a matching cause', async (_name, write) => {
@@ -53,10 +54,15 @@ describe('raiseConflictWhen', () => {
     expect(applier.insert).toHaveBeenCalledWith(tx, { id: 'a' }, 'key-1');
   });
 
-  it('passes delete and check through even when the predicate would match', async () => {
+  it.each(writes)('%s keeps the original error as the conflict cause', async (_name, write) => {
+    const cause = new RaceError();
+    const raised = await write(raiseConflictWhen(isRace)(makeApplier(cause))).catch((error: unknown) => error);
+    expect((raised as VersionConflict).cause).toBe(cause);
+  });
+
+  it('passes check through even when the predicate would match', async () => {
     const cause = new RaceError();
     const decorated = raiseConflictWhen(() => true)(makeApplier(cause));
-    await expect(decorated.delete(tx, 'a', 1)).rejects.toBe(cause);
     await expect(decorated.check?.(tx, 'a', 1)).rejects.toBe(cause);
   });
 });

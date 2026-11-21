@@ -65,11 +65,13 @@ contention), otherwise two transactions can still check each other's rows and bo
 - **`ApplierRegistry<TTx>`** — per entity tag, an **`EntityApplier<TTx>`** with `insert` / `update` / `delete`
   (and optionally `check`) that perform the mechanical write over `tx` and decide nothing. An applier reports `applied: false` on a stale version (the engine turns that into a
   `VersionConflict`), or may throw `VersionConflict` itself for a unique/FK race; the engine catches it and retries.
-  `raiseConflictWhen(isConflict)(applier)` does that for you — it wraps `insert` and `update` so a matching driver error becomes a `VersionConflict`:
+  `raiseConflictWhen(isConflict)(applier)` does that for you — it wraps `insert`, `update` and `delete` so a matching driver error becomes a `VersionConflict` (the original is kept as `cause`). Only `check` passes through, because it writes nothing:
 
   ```ts
   const isUniqueViolation = (cause: unknown): boolean => cause instanceof DriverError && cause.code === 'UNIQUE';
-  const registry: ApplierRegistry<Tx> = { tag: raiseConflictWhen(isUniqueViolation)(tagApplier) };
+  const isForeignKeyViolation = (cause: unknown): boolean => cause instanceof DriverError && cause.code === 'FOREIGN_KEY';
+  const asConflict = raiseConflictWhen(R.anyPass([isUniqueViolation, isForeignKeyViolation]));
+  const registry: ApplierRegistry<Tx> = { tag: asConflict(tagApplier), entry: asConflict(entryApplier) };
   ```
 - **`IsTransientContention`** (`ctx.isTransientContention`) — `(cause) => boolean`; tells the engine which driver errors are retryable
   transient contention (e.g. a busy lock).
