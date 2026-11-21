@@ -10,6 +10,10 @@ describe('public API', () => {
     expect(api.shouldRead).toBeTypeOf('function');
   });
 
+  it('exports the conflict-classification decorator', () => {
+    expect(api.raiseConflictWhen).toBeTypeOf('function');
+  });
+
   it('keeps the unread-token marker internal', () => {
     expect(Object.keys(api)).not.toContain('UNREAD_TOKEN');
   });

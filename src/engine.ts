@@ -53,6 +53,38 @@ export type ReadBack<TTx> = (tx: TTx, id: string) => Promise<unknown>;
 /** Rolls back the batch and re-runs the flow. Exported so an applier can raise it for its own conflicts. */
 export class VersionConflict extends Error {}
 
+/** Classifies a failure as another writer winning (a unique or FK race), so the flow re-runs and gives its ordinary answer. */
+export type IsConflict = (cause: unknown) => boolean;
+
+const rethrowAsConflict = async <T>(isConflict: IsConflict, work: () => Promise<T>): Promise<T> => {
+  try {
+    return await work();
+  } catch (cause) {
+    throw isConflict(cause) ? new VersionConflict(undefined, { cause }) : cause;
+  }
+};
+
+const forwardCheck = <TTx>(applier: EntityApplier<TTx>): EntityApplier<TTx>['check'] => {
+  const { check } = applier;
+  return check && ((tx, id, version) => check.call(applier, tx, id, version));
+};
+
+/**
+ * Wraps an applier's `insert`, `update` and `delete` so a failure `isConflict` matches raises `VersionConflict`
+ * (keeping the original as `cause`); any other failure rethrows untouched. `check` only reads, so it passes through.
+ */
+// Curried rather than purried: a factory built once and applied to many appliers, never used in a pipe.
+export const raiseConflictWhen =
+  (isConflict: IsConflict) =>
+  <TTx>(applier: EntityApplier<TTx>): EntityApplier<TTx> => ({
+    // Forwarded member by member: a spread would drop a class-based applier's prototype methods.
+    insert: (tx, model, idempotencyKey) =>
+      rethrowAsConflict(isConflict, () => applier.insert(tx, model, idempotencyKey)),
+    update: (tx, model) => rethrowAsConflict(isConflict, () => applier.update(tx, model)),
+    delete: (tx, id, version) => rethrowAsConflict(isConflict, () => applier.delete(tx, id, version)),
+    check: forwardCheck(applier),
+  });
+
 const resolveApplier = <TTx>(registry: ApplierRegistry<TTx>, entity: string): EntityApplier<TTx> => {
   const applier = registry[entity];
   if (!applier) throw new Error(`runEffects: no applier registered for entity "${entity}"`);
