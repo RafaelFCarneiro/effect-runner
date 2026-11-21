@@ -61,6 +61,31 @@ describe('raiseConflictWhen', () => {
   });
 });
 
+describe('raiseConflictWhen with a class-based applier', () => {
+  class ClassApplier implements EntityApplier<typeof tx> {
+    readonly label = 'receiver';
+    insert = async () => succeeded;
+    update = async () => succeeded;
+    async delete(): Promise<{ applied: boolean }> {
+      return { applied: this.label === 'receiver' };
+    }
+    async check(): Promise<{ applied: boolean }> {
+      return { applied: this.label === 'receiver' };
+    }
+  }
+
+  it('forwards prototype delete and check with their receiver', async () => {
+    const decorated = raiseConflictWhen(isRace)(new ClassApplier());
+    await expect(decorated.delete(tx, 'a', 1)).resolves.toEqual(succeeded);
+    await expect(decorated.check?.(tx, 'a', 1)).resolves.toEqual(succeeded);
+  });
+
+  it('keeps check absent when the applier does not implement it', () => {
+    const withoutCheck: EntityApplier<typeof tx> = { ...makeApplier(), check: undefined };
+    expect(raiseConflictWhen(isRace)(withoutCheck).check).toBeUndefined();
+  });
+});
+
 describe('raiseConflictWhen through runEffects', () => {
   const ctx: EngineContext<typeof tx, string> = {
     runner: { runInTransaction: (work) => work(tx) },

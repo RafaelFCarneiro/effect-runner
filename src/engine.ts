@@ -68,10 +68,12 @@ const rethrowAsConflict = async <T>(isConflict: IsConflict, work: () => Promise<
 export const raiseConflictWhen =
   (isConflict: IsConflict) =>
   <TTx>(applier: EntityApplier<TTx>): EntityApplier<TTx> => ({
-    ...applier,
     insert: (tx, model, idempotencyKey) =>
       rethrowAsConflict(isConflict, () => applier.insert(tx, model, idempotencyKey)),
     update: (tx, model) => rethrowAsConflict(isConflict, () => applier.update(tx, model)),
+    // Explicit forwarding keeps class-based appliers working: a spread would drop prototype methods.
+    delete: (tx, id, version) => applier.delete(tx, id, version),
+    check: applier.check?.bind(applier),
   });
 
 const resolveApplier = <TTx>(registry: ApplierRegistry<TTx>, entity: string): EntityApplier<TTx> => {
